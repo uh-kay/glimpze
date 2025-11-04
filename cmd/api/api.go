@@ -13,7 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/uh-kay/xed/store"
+	"github.com/uh-kay/glimpze/store"
+	"github.com/uh-kay/glimpze/store/cache"
 )
 
 type application struct {
@@ -21,11 +22,27 @@ type application struct {
 	store  store.Storage
 	logger *slog.Logger
 	db     *pgxpool.Pool
+	cache  cache.Storage
 }
 
 type config struct {
-	addr string
-	env  string
+	addr      string
+	env       string
+	dbConfig  dbConfig
+	valkeyCfg valkeyCfg
+}
+
+type dbConfig struct {
+	addr         string
+	maxOpenConns int
+	maxIdleTime  string
+}
+
+type valkeyCfg struct {
+	enabled bool
+	addr    string
+	pw      string
+	db      int
 }
 
 func (app *application) mount() http.Handler {
@@ -38,6 +55,15 @@ func (app *application) mount() http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthcheck)
+
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/login", app.login)
+			r.Post("/register", app.register)
+		})
+
+		r.Route("/posts", func(r chi.Router) {
+			r.Post("/", app.createPost)
+		})
 	})
 
 	return r
