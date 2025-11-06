@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"github.com/uh-kay/glimpze/db"
 	"github.com/uh-kay/glimpze/env"
 	"github.com/uh-kay/glimpze/migrations"
+	"github.com/uh-kay/glimpze/storage"
 	"github.com/uh-kay/glimpze/store"
 	"github.com/uh-kay/glimpze/store/cache"
 	"github.com/valkey-io/valkey-go"
@@ -26,6 +28,12 @@ func main() {
 		},
 		valkeyCfg: valkeyCfg{
 			enabled: env.GetBool("VALKEY_ENABLED", false),
+		},
+		r2Cfg: r2Cfg{
+			bucketName:      env.GetString("R2_BUCKET_NAME", ""),
+			accountID:       env.GetString("R2_ACCOUNT_ID", ""),
+			accessKeyID:     env.GetString("R2_ACCESS_KEY_ID", ""),
+			accessKeySecret: env.GetString("R2_ACCESS_KEY_SECRET", ""),
 		},
 	}
 
@@ -53,7 +61,14 @@ func main() {
 		defer vdb.Close()
 	}
 
+	// Valkey
 	cache := cache.NewValkeyStorage(vdb)
+
+	// Cloudflare R2
+	storage, err := storage.NewR2Client(context.Background(), cfg.r2Cfg.bucketName, cfg.r2Cfg.accountID, cfg.r2Cfg.accessKeyID, cfg.r2Cfg.accessKeySecret)
+	if err != nil {
+		logger.Error("error connecting to r2", "error", err.Error())
+	}
 
 	// Run migrations
 	if err := migrations.RunMigrations(db); err != nil {
@@ -61,11 +76,12 @@ func main() {
 	}
 
 	app := &application{
-		logger: logger,
-		config: cfg,
-		db:     db,
-		store:  store,
-		cache:  cache,
+		logger:  logger,
+		config:  cfg,
+		db:      db,
+		store:   store,
+		cache:   cache,
+		storage: storage,
 	}
 
 	err = app.run(app.mount())

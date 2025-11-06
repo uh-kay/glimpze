@@ -13,16 +13,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/uh-kay/glimpze/storage"
 	"github.com/uh-kay/glimpze/store"
 	"github.com/uh-kay/glimpze/store/cache"
 )
 
 type application struct {
-	config config
-	store  store.Storage
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	cache  cache.Storage
+	config  config
+	store   store.Storage
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	cache   cache.Storage
+	storage *storage.R2Client
 }
 
 type config struct {
@@ -30,6 +32,7 @@ type config struct {
 	env       string
 	dbConfig  dbConfig
 	valkeyCfg valkeyCfg
+	r2Cfg     r2Cfg
 }
 
 type dbConfig struct {
@@ -43,6 +46,13 @@ type valkeyCfg struct {
 	addr    string
 	pw      string
 	db      int
+}
+
+type r2Cfg struct {
+	bucketName      string
+	accountID       string
+	accessKeyID     string
+	accessKeySecret string
 }
 
 func (app *application) mount() http.Handler {
@@ -59,10 +69,23 @@ func (app *application) mount() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", app.login)
 			r.Post("/register", app.register)
+
+			r.Route("/profile", func(r chi.Router) {
+				r.Use(app.AuthMiddleware)
+				r.Get("/", app.profile)
+			})
 		})
 
 		r.Route("/posts", func(r chi.Router) {
-			r.Post("/", app.createPost)
+			r.Get("/{postID}", app.getPost)
+
+			r.Group(func(r chi.Router) {
+				r.Use(app.AuthMiddleware)
+
+				r.Post("/", app.createPost)
+				// r.Patch("/{postID}", app.updatePost)
+				r.Delete("/{postID}", app.deletePost)
+			})
 		})
 	})
 
