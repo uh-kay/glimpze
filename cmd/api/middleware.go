@@ -4,30 +4,35 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/uh-kay/glimpze/auth"
-	"github.com/uh-kay/glimpze/store/cache"
 )
 
 type contextKey string
 
-const userIDCtx contextKey = "userID"
+const userCtx contextKey = "user"
 
-func bearerFromHeader(w http.ResponseWriter) string {
-	h := w.Header().Get("Authorization")
+func bearerFromHeader(r *http.Request) string {
+	h := r.Header.Get("Authorization")
 	if after, ok := strings.CutPrefix(h, "Bearer "); ok {
 		return after
 	}
 	return ""
 }
 
-func (app *application) AuthMiddleware(v *cache.Storage, next http.Handler) http.Handler {
+func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, _ := r.Cookie("access_token")
-		tokenStr := cookie.Value
+		var tokenStr string
+
+		cookie, err := r.Cookie("access_token")
+		if err == nil && cookie != nil {
+			tokenStr = cookie.Value
+		}
+
 		if tokenStr == "" {
-			tokenStr = bearerFromHeader(w)
+			tokenStr = bearerFromHeader(r)
 		}
 		if tokenStr == "" {
 			app.unauthorizedErrorResponse(w, r, errors.New("missing token"))
@@ -40,12 +45,25 @@ func (app *application) AuthMiddleware(v *cache.Storage, next http.Handler) http
 			return
 		}
 
-		if _, err := v.Sessions.GetUser(r.Context(), "access:"+claims.ID); err != nil {
+		userIDStr, err := app.cache.Sessions.GetUser(r.Context(), "access:"+claims.ID)
+		if err != nil {
 			app.unauthorizedErrorResponse(w, r, err)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userIDCtx, claims.Subject)
+		userID, err := strconv.Atoi(userIDStr)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		user, err := app.store.Users.GetByID(r.Context(), int64(userID))
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userCtx, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

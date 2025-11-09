@@ -69,6 +69,7 @@ func (app *application) mount() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", app.login)
 			r.Post("/register", app.register)
+			r.Post("/token/refresh", app.refreshToken)
 
 			r.Route("/profile", func(r chi.Router) {
 				r.Use(app.AuthMiddleware)
@@ -83,7 +84,7 @@ func (app *application) mount() http.Handler {
 				r.Use(app.AuthMiddleware)
 
 				r.Post("/", app.createPost)
-				// r.Patch("/{postID}", app.updatePost)
+				r.Patch("/{postID}", app.updatePost)
 				r.Delete("/{postID}", app.deletePost)
 			})
 		})

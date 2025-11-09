@@ -14,7 +14,7 @@ type Storage struct {
 		Set(context.Context, *store.User) error
 	}
 	Sessions interface {
-		GetUser(ctx context.Context, key string) (*store.User, error)
+		GetUser(ctx context.Context, key string) (string, error)
 		Set(ctx context.Context, key, userID string, exp time.Time) error
 		Delete(ctx context.Context, key string) error
 	}

@@ -111,3 +111,51 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		Data:    user,
 	})
 }
+
+func (app *application) profile(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		Message: "success",
+		Data:    user,
+	})
+}
+
+func getUserFromContext(r *http.Request) *store.User {
+	return r.Context().Value(userCtx).(*store.User)
+}
+
+func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
+	ref, err := auth.MustCookie(r, "refresh_token")
+	if err != nil {
+		app.unauthorizedErrorResponse(w, r, err)
+		return
+	}
+
+	claims, err := auth.ParseRefresh(ref)
+	if err != nil {
+		app.unauthorizedErrorResponse(w, r, err)
+		return
+	}
+	if _, err := app.cache.Sessions.GetUser(r.Context(), "refresh:"+claims.ID); err != nil {
+		app.unauthorizedErrorResponse(w, r, err)
+		return
+	}
+	_ = app.cache.Sessions.Delete(r.Context(), "refresh:"+claims.ID)
+
+	toks, err := auth.IssueTokens(claims.Subject)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := auth.Persist(r.Context(), &app.cache, toks); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	auth.SetAuthCookies(w, toks)
+	app.jsonResponse(w, http.StatusCreated, envelope{
+		Message: "success",
+		Data:    nil,
+	})
+}

@@ -102,7 +102,7 @@ func SetAuthCookies(w http.ResponseWriter, t *Tokens) {
 	refresh_cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    t.Refresh,
-		MaxAge:   int(time.Until(t.ExpAcc).Seconds()),
+		MaxAge:   int(time.Until(t.ExpRef).Seconds()),
 		Path:     "/",
 		Domain:   "",
 		Secure:   true,
@@ -174,4 +174,12 @@ func parseWithSecret(tokenStr, secret string) (*jwt.RegisteredClaims, error) {
 	}
 
 	return claims, nil
+}
+
+func MustCookie(r *http.Request, name string) (string, error) {
+	val, err := r.Cookie(name)
+	if err != nil {
+		return "", err
+	}
+	return val.Value, nil
 }
