@@ -86,7 +86,17 @@ func (app *application) mount() http.Handler {
 				r.Post("/", app.createPost)
 				r.Patch("/{postID}", app.updatePost)
 				r.Delete("/{postID}", app.deletePost)
+
+				r.Post("/{postID}/tags", app.addTag)
+				r.Get("/{postID}/tags", app.listTag)
+				r.Delete("/{postID}/tags/{tagID}", app.removeTag)
 			})
+		})
+
+		r.Route("/tags", func(r chi.Router) {
+			r.Post("/", app.createTag)
+			r.Get("/{tagID}", app.getTag)
+			r.Delete("/{tagID}", app.deleteTag)
 		})
 	})
 

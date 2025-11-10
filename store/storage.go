@@ -35,6 +35,17 @@ type Storage struct {
 		// Update(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
 		Delete(ctx context.Context, tx pgx.Tx, fileID uuid.UUID) error
 	}
+	Tags interface {
+		Create(ctx context.Context, tx pgx.Tx, name string) (*Tag, error)
+		GetByID(ctx context.Context, id int64) (*Tag, error)
+		GetByName(ctx context.Context, name string) (*Tag, error)
+		Delete(ctx context.Context, tx pgx.Tx, id int64) error
+	}
+	PostTags interface {
+		Create(ctx context.Context, tx pgx.Tx, postID, tagID int64, tagName string) (*PostTag, error)
+		Delete(ctx context.Context, tx pgx.Tx, postID, tagID int64) error
+		List(ctx context.Context, postID int64) ([]*PostTag, error)
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
@@ -42,5 +53,7 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		Posts:     &PostStore{db},
 		Users:     &UserStore{db},
 		PostFiles: &PostFileStore{db},
+		Tags:      &TagStore{db},
+		PostTags:  &PostTagStore{db},
 	}
 }
