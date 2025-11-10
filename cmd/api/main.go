@@ -5,6 +5,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/uh-kay/glimpze/db"
 	"github.com/uh-kay/glimpze/env"
@@ -34,6 +35,10 @@ func main() {
 			accountID:       env.GetString("R2_ACCOUNT_ID", ""),
 			accessKeyID:     env.GetString("R2_ACCESS_KEY_ID", ""),
 			accessKeySecret: env.GetString("R2_ACCESS_KEY_SECRET", ""),
+		},
+		rateLimitCfg: rateLimitCfg{
+			requestCount: env.GetInt("RATE_LIMITER_REQUEST_COUNT", 20),
+			windowLength: time.Minute,
 		},
 	}
 

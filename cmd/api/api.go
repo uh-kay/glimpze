@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uh-kay/glimpze/storage"
 	"github.com/uh-kay/glimpze/store"
@@ -28,11 +29,12 @@ type application struct {
 }
 
 type config struct {
-	addr      string
-	env       string
-	dbConfig  dbConfig
-	valkeyCfg valkeyCfg
-	r2Cfg     r2Cfg
+	addr         string
+	env          string
+	dbConfig     dbConfig
+	valkeyCfg    valkeyCfg
+	r2Cfg        r2Cfg
+	rateLimitCfg rateLimitCfg
 }
 
 type dbConfig struct {
@@ -55,6 +57,11 @@ type r2Cfg struct {
 	accessKeySecret string
 }
 
+type rateLimitCfg struct {
+	requestCount int
+	windowLength time.Duration
+}
+
 func (app *application) mount() http.Handler {
 	r := chi.NewRouter()
 
@@ -62,6 +69,15 @@ func (app *application) mount() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(httprate.Limit(
+		app.config.rateLimitCfg.requestCount,
+		app.config.rateLimitCfg.windowLength,
+		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+			app.rateLimitExceededResponse(w, r, "rate limit exceeded, retry after: 1 minute")
+		})),
+	)
+
+	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthcheck)
