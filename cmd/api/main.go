@@ -56,13 +56,6 @@ func main() {
 
 	store := store.NewStorage(db)
 
-	// Cache default role
-	defaultRole, err := store.Roles.GetByName(context.Background(), "user")
-	if err != nil {
-		logger.Error("error getting user role", "error", err.Error())
-		log.Fatal(err)
-	}
-
 	var vdb valkey.Client
 	if cfg.valkeyCfg.enabled {
 		vdb, err = cache.NewValkeyClient(cfg.valkeyCfg.addr, cfg.valkeyCfg.pw, cfg.valkeyCfg.db)
@@ -92,6 +85,13 @@ func main() {
 	// Run migrations
 	if err := migrations.RunMigrations(db); err != nil {
 		logger.Error("error migrating", "error", err.Error())
+		log.Fatal(err)
+	}
+
+	// Cache default role
+	defaultRole, err := store.Roles.GetByName(context.Background(), "user")
+	if err != nil {
+		logger.Error("error getting user role", "error", err.Error())
 		log.Fatal(err)
 	}
 
