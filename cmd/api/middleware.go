@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"github.com/uh-kay/glimpze/auth"
+	"github.com/uh-kay/glimpze/store"
 )
 
 type contextKey string
 
 const userCtx contextKey = "user"
+const postCtx contextKey = "post"
 
 func bearerFromHeader(r *http.Request) string {
 	h := r.Header.Get("Authorization")
@@ -75,4 +77,57 @@ func MustCookie(w http.ResponseWriter, r *http.Request, name string) (string, er
 		return "", errors.New("missing cookie: " + name)
 	}
 	return valStr, nil
+}
+
+func (app *application) checkPostOwnership(requiredRole string, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := getUserFromContext(r)
+		post := getPostFromContext(r)
+
+		if post.UserID == user.ID {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		allowed, err := app.checkRolePrecedence(r.Context(), user, requiredRole)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		if !allowed {
+			app.forbiddenResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) checkResourceAccess(requiredRole string, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := getUserFromContext(r)
+
+		allowed, err := app.checkRolePrecedence(r.Context(), user, requiredRole)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		if !allowed {
+			app.forbiddenResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) checkRolePrecedence(ctx context.Context, user *store.User, rolename string) (bool, error) {
+	role, err := app.store.Roles.GetByName(ctx, rolename)
+	if err != nil {
+		return false, err
+	}
+
+	return user.Role.Level >= role.Level, nil
 }

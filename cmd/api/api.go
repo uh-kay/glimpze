@@ -20,12 +20,13 @@ import (
 )
 
 type application struct {
-	config  config
-	store   store.Storage
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	cache   cache.Storage
-	storage *storage.R2Client
+	config      config
+	store       store.Storage
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	cache       cache.Storage
+	storage     *storage.R2Client
+	defaultRole *store.Role
 }
 
 type config struct {
@@ -100,8 +101,8 @@ func (app *application) mount() http.Handler {
 				r.Use(app.AuthMiddleware)
 
 				r.Post("/", app.createPost)
-				r.Patch("/{postID}", app.updatePost)
-				r.Delete("/{postID}", app.deletePost)
+				r.Patch("/{postID}", app.checkPostOwnership("moderator", app.updatePost))
+				r.Delete("/{postID}", app.checkPostOwnership("admin", app.deletePost))
 
 				r.Post("/{postID}/tags", app.addTag)
 				r.Get("/{postID}/tags", app.listTag)
@@ -110,9 +111,17 @@ func (app *application) mount() http.Handler {
 		})
 
 		r.Route("/tags", func(r chi.Router) {
-			r.Post("/", app.createTag)
+			r.Use(app.AuthMiddleware)
+
+			r.Post("/", app.checkResourceAccess("moderator", app.createTag))
 			r.Get("/{tagID}", app.getTag)
-			r.Delete("/{tagID}", app.deleteTag)
+			r.Delete("/{tagID}", app.checkResourceAccess("moderator", app.deleteTag))
+		})
+
+		r.Route("/users", func(r chi.Router) {
+			r.Use(app.AuthMiddleware)
+
+			r.Patch("/{userName}", app.checkResourceAccess("admin", app.updateUserRole))
 		})
 	})
 

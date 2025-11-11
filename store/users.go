@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -14,10 +16,10 @@ type User struct {
 	DisplayName string     `json:"display_name"`
 	Email       string     `json:"email"`
 	Password    password   `json:"-"`
-	Role        string     `json:"role"`
 	ActivatedAt *time.Time `json:"activated_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	Role        Role       `json:"role"`
 }
 
 type password struct {
@@ -47,9 +49,9 @@ type UserStore struct {
 
 func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
-	INSERT INTO users (id, name, display_name, email, password_hash)
-	VALUES ($1, $2, $3, $4, $5)
-	RETURNING id, name, display_name, email, role, activated_at, created_at, updated_at
+	INSERT INTO users (id, name, display_name, email, password_hash, role_id, role_name)
+	VALUES ($1, $2, $3, $4, $5, $6, $7)
+	RETURNING id, name, display_name, email, activated_at, created_at, updated_at
 	`
 
 	err := s.db.QueryRow(ctx,
@@ -59,12 +61,13 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 		user.DisplayName,
 		user.Email,
 		user.Password.hash,
+		user.Role.ID,
+		user.Role.Name,
 	).Scan(
 		&user.ID,
 		&user.Name,
 		&user.DisplayName,
 		&user.Email,
-		&user.Role,
 		&user.ActivatedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -80,8 +83,9 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	var user User
 
 	query := `
-	SELECT id, name, display_name, email, password_hash, role, activated_at, created_at, updated_at
+	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
 	FROM users
+	JOIN roles ON (users.role_id = roles.id)
 	WHERE email = $1`
 
 	err := s.db.QueryRow(ctx, query, email).Scan(
@@ -90,10 +94,14 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.Role,
 		&user.ActivatedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Role.ID,
+		&user.Role.Name,
+		&user.Role.Level,
+		&user.Role.Description,
+		&user.Role.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -106,9 +114,10 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 	var user User
 
 	query := `
-	SELECT id, name, display_name, email, password_hash, role, activated_at, created_at, updated_at
+	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
 	FROM users
-	WHERE name = $1`
+	JOIN roles ON (users.role_id = roles.id)
+	WHERE users.name = $1`
 
 	err := s.db.QueryRow(ctx, query, name).Scan(
 		&user.ID,
@@ -116,10 +125,14 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.Role,
 		&user.ActivatedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Role.ID,
+		&user.Role.Name,
+		&user.Role.Level,
+		&user.Role.Description,
+		&user.Role.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -132,9 +145,10 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 	var user User
 
 	query := `
-	SELECT id, name, display_name, email, password_hash, role, activated_at, created_at, updated_at
+	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
 	FROM users
-	WHERE id = $1`
+	JOIN roles ON (users.role_id = roles.id)
+	WHERE users.id = $1`
 
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
@@ -142,12 +156,65 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.Role,
 		&user.ActivatedAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Role.ID,
+		&user.Role.Name,
+		&user.Role.Level,
+		&user.Role.Description,
+		&user.Role.CreatedAt,
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (s *UserStore) UpdateRole(ctx context.Context, tx pgx.Tx, name string, role *Role) (*User, error) {
+	var user User
+	query := `
+	WITH updated AS (
+		UPDATE users
+		SET role_id = $1, role_name = $2
+		WHERE name = $3
+		RETURNING *
+	)
+	SELECT
+		updated.id,
+		updated.name,
+		updated.display_name,
+		updated.email,
+		updated.password_hash,
+		updated.activated_at,
+		updated.created_at,
+		updated.updated_at,
+		roles.id as "roles.id",
+		roles.name as "roles.name",
+		roles.level as "roles.level",
+		roles.description as "roles.description"
+	FROM updated
+	JOIN roles ON (updated.role_id = roles.id)`
+
+	err := tx.QueryRow(ctx, query, role.ID, role.Name, name).Scan(
+		&user.ID,
+		&user.Name,
+		&user.DisplayName,
+		&user.Email,
+		&user.Password.hash,
+		&user.ActivatedAt,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.Role.ID,
+		&user.Role.Name,
+		&user.Role.Level,
+		&user.Role.Description,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 

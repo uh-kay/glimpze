@@ -81,6 +81,7 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		Name:        payload.Name,
 		DisplayName: payload.DisplayName,
 		Email:       payload.Email,
+		Role:        *app.defaultRole,
 	}
 
 	if err := user.Password.Set(payload.Password); err != nil {

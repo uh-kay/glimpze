@@ -45,14 +45,14 @@ func (s *PostStore) Create(ctx context.Context, tx pgx.Tx, content string, userI
 	return &post, nil
 }
 
-func (s *PostStore) GetByID(ctx context.Context, tx pgx.Tx, id int64) (*Post, error) {
+func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	var post Post
 	query := `
 	SELECT id, content, likes, user_id, created_at, updated_at
 	FROM posts
 	WHERE id = $1`
 
-	err := tx.QueryRow(ctx, query, id).Scan(
+	err := s.db.QueryRow(ctx, query, id).Scan(
 		&post.ID,
 		&post.Content,
 		&post.Likes,

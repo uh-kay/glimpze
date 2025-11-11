@@ -19,7 +19,7 @@ var (
 type Storage struct {
 	Posts interface {
 		Create(ctx context.Context, tx pgx.Tx, content string, userID int64) (*Post, error)
-		GetByID(ctx context.Context, tx pgx.Tx, id int64) (*Post, error)
+		GetByID(ctx context.Context, id int64) (*Post, error)
 		Update(ctx context.Context, tx pgx.Tx, content string, id int64) (*Post, error)
 		Delete(ctx context.Context, id int64) error
 	}
@@ -28,6 +28,7 @@ type Storage struct {
 		GetByEmail(ctx context.Context, email string) (*User, error)
 		GetByName(ctx context.Context, name string) (*User, error)
 		GetByID(ctx context.Context, id int64) (*User, error)
+		UpdateRole(ctx context.Context, tx pgx.Tx, name string, role *Role) (*User, error)
 	}
 	PostFiles interface {
 		Create(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
@@ -46,6 +47,9 @@ type Storage struct {
 		Delete(ctx context.Context, tx pgx.Tx, postID, tagID int64) error
 		List(ctx context.Context, postID int64) ([]*PostTag, error)
 	}
+	Roles interface {
+		GetByName(ctx context.Context, name string) (*Role, error)
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
@@ -55,5 +59,6 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		PostFiles: &PostFileStore{db},
 		Tags:      &TagStore{db},
 		PostTags:  &PostTagStore{db},
+		Roles:     &RoleStore{db},
 	}
 }

@@ -97,7 +97,7 @@ type PostFileWithLink struct {
 
 func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 	postIDStr := r.PathValue("postID")
-	postID, err := strconv.Atoi(postIDStr)
+	postID, err := strconv.ParseInt(postIDStr, 10, 64)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
@@ -110,7 +110,7 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	post, err := app.store.Posts.GetByID(r.Context(), tx, int64(postID))
+	post, err := app.store.Posts.GetByID(r.Context(), postID)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -381,4 +381,33 @@ func (app *application) cleanupUploadedFiles(ctx context.Context, filenames []st
 	for _, val := range filenames {
 		_ = app.storage.DeleteFromR2(ctx, val)
 	}
+}
+
+func getPostFromContext(r *http.Request) *store.Post {
+	return r.Context().Value(postCtx).(*store.Post)
+}
+
+func (app *application) postContextMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		postIDStr := r.PathValue("postID")
+		postID, err := strconv.ParseInt(postIDStr, 10, 64)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		post, err := app.store.Posts.GetByID(r.Context(), postID)
+		if err != nil {
+			switch err {
+			case pgx.ErrNoRows:
+				app.notFoundError(w, r, err)
+			default:
+				app.internalServerError(w, r, err)
+			}
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), postCtx, post)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

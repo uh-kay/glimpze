@@ -56,6 +56,13 @@ func main() {
 
 	store := store.NewStorage(db)
 
+	// Cache default role
+	defaultRole, err := store.Roles.GetByName(context.Background(), "user")
+	if err != nil {
+		logger.Error("error getting user role", "error", err.Error())
+		log.Fatal(err)
+	}
+
 	var vdb valkey.Client
 	if cfg.valkeyCfg.enabled {
 		vdb, err = cache.NewValkeyClient(cfg.valkeyCfg.addr, cfg.valkeyCfg.pw, cfg.valkeyCfg.db)
@@ -70,23 +77,32 @@ func main() {
 	cache := cache.NewValkeyStorage(vdb)
 
 	// Cloudflare R2
-	storage, err := storage.NewR2Client(context.Background(), cfg.r2Cfg.bucketName, cfg.r2Cfg.accountID, cfg.r2Cfg.accessKeyID, cfg.r2Cfg.accessKeySecret)
+	storage, err := storage.NewR2Client(
+		context.Background(),
+		cfg.r2Cfg.bucketName,
+		cfg.r2Cfg.accountID,
+		cfg.r2Cfg.accessKeyID,
+		cfg.r2Cfg.accessKeySecret,
+	)
 	if err != nil {
 		logger.Error("error connecting to r2", "error", err.Error())
+		log.Fatal(err)
 	}
 
 	// Run migrations
 	if err := migrations.RunMigrations(db); err != nil {
 		logger.Error("error migrating", "error", err.Error())
+		log.Fatal(err)
 	}
 
 	app := &application{
-		logger:  logger,
-		config:  cfg,
-		db:      db,
-		store:   store,
-		cache:   cache,
-		storage: storage,
+		logger:      logger,
+		config:      cfg,
+		db:          db,
+		store:       store,
+		cache:       cache,
+		storage:     storage,
+		defaultRole: defaultRole,
 	}
 
 	err = app.run(app.mount())
