@@ -50,6 +50,12 @@ type Storage struct {
 	Roles interface {
 		GetByName(ctx context.Context, name string) (*Role, error)
 	}
+	Comments interface {
+		Create(ctx context.Context, tx pgx.Tx, content string, userID, postID int64) (*Comment, error)
+		GetByID(ctx context.Context, commentID int64) (*Comment, error)
+		Update(ctx context.Context, tx pgx.Tx, content string, commentID int64) (*Comment, error)
+		Delete(ctx context.Context, tx pgx.Tx, commentID int64) error
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
@@ -60,5 +66,6 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		Tags:      &TagStore{db},
 		PostTags:  &PostTagStore{db},
 		Roles:     &RoleStore{db},
+		Comments:  &CommentStore{db},
 	}
 }
