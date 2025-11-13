@@ -89,7 +89,14 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := app.store.Users.Create(r.Context(), user)
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	err = app.store.Users.Create(r.Context(), tx, user)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -107,9 +114,23 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userLimit, err := app.store.UserLimits.Create(r.Context(), tx, user.ID)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
 	app.jsonResponse(w, http.StatusCreated, envelope{
 		Message: "user registered",
-		Data:    user,
+		Data: map[string]any{
+			"user":       user,
+			"user_limit": userLimit,
+		},
 	})
 }
 

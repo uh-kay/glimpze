@@ -76,6 +76,12 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		postFileRecords = append(postFileRecords, postFileRecord)
 	}
 
+	err = app.store.UserLimits.Reduce(r.Context(), tx, user.ID, "create_post_limit")
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
 	if err = tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return

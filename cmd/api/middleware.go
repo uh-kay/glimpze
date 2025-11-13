@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -129,5 +130,57 @@ func (app *application) checkRolePrecedence(ctx context.Context, user *store.Use
 		return false, err
 	}
 
+	fmt.Printf("User role: %s (level %d), Required role: %s (level %d)\n",
+		user.Role.Name, user.Role.Level, rolename, role.Level)
+
 	return user.Role.Level >= role.Level, nil
+}
+
+type LimitType string
+
+const (
+	CreatePostLimit LimitType = "create_post"
+	CommentLimit    LimitType = "comment"
+	LikeLimit       LimitType = "like"
+	FollowLimit     LimitType = "follow"
+)
+
+func (app *application) checkLimit(user *store.User, limitType LimitType) bool {
+	switch limitType {
+	case CreatePostLimit:
+		return user.UserLimit.CreatePostLimit > 0
+	case CommentLimit:
+		return user.UserLimit.CommentLimit > 0
+	case LikeLimit:
+		return user.UserLimit.LikeLimit > 0
+	case FollowLimit:
+		return user.UserLimit.FollowLimit > 0
+	default:
+		return true
+	}
+}
+
+func (app *application) checkResourceAccessWithLimit(requiredRole string, limitType LimitType, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := getUserFromContext(r)
+
+		allowed, err := app.checkRolePrecedence(r.Context(), user, requiredRole)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		if !allowed {
+			app.forbiddenResponse(w, r)
+			return
+		}
+
+		limitAllowed := app.checkLimit(user, limitType)
+		if !limitAllowed {
+			app.forbiddenResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

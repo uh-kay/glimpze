@@ -105,6 +105,14 @@ func main() {
 		defaultRole: defaultRole,
 	}
 
+	// Update user limits past midnight
+	go func() {
+		ctx := context.Background()
+		if err := app.updateUserLimits(ctx); err != nil {
+			logger.Error("error updating user limit", "error", err.Error())
+		}
+	}()
+
 	err = app.run(app.mount())
 	if err != nil {
 		logger.Error("error starting server", "error", err.Error())

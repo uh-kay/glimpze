@@ -100,7 +100,7 @@ func (app *application) mount() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(app.AuthMiddleware)
 
-				r.Post("/", app.createPost)
+				r.Post("/", app.checkResourceAccessWithLimit("user", CreatePostLimit, app.createPost))
 				r.Patch("/{postID}", app.checkPostOwnership("moderator", app.updatePost))
 				r.Delete("/{postID}", app.checkPostOwnership("admin", app.deletePost))
 

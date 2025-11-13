@@ -24,11 +24,12 @@ type Storage struct {
 		Delete(ctx context.Context, id int64) error
 	}
 	Users interface {
-		Create(ctx context.Context, user *User) error
+		Create(ctx context.Context, tx pgx.Tx, user *User) error
 		GetByEmail(ctx context.Context, email string) (*User, error)
 		GetByName(ctx context.Context, name string) (*User, error)
 		GetByID(ctx context.Context, id int64) (*User, error)
 		UpdateRole(ctx context.Context, tx pgx.Tx, name string, role *Role) (*User, error)
+		GetIDs(ctx context.Context, limit, offset int64) ([]int, error)
 	}
 	PostFiles interface {
 		Create(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
@@ -56,16 +57,22 @@ type Storage struct {
 		Update(ctx context.Context, tx pgx.Tx, content string, commentID int64) (*Comment, error)
 		Delete(ctx context.Context, tx pgx.Tx, commentID int64) error
 	}
+	UserLimits interface {
+		Create(ctx context.Context, tx pgx.Tx, userID int64) (*UserLimit, error)
+		Add(ctx context.Context, tx pgx.Tx, userID int64) (*UserLimit, error)
+		Reduce(ctx context.Context, tx pgx.Tx, userID int64, limitType string) error
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
 	return Storage{
-		Posts:     &PostStore{db},
-		Users:     &UserStore{db},
-		PostFiles: &PostFileStore{db},
-		Tags:      &TagStore{db},
-		PostTags:  &PostTagStore{db},
-		Roles:     &RoleStore{db},
-		Comments:  &CommentStore{db},
+		Posts:      &PostStore{db},
+		Users:      &UserStore{db},
+		PostFiles:  &PostFileStore{db},
+		Tags:       &TagStore{db},
+		PostTags:   &PostTagStore{db},
+		Roles:      &RoleStore{db},
+		Comments:   &CommentStore{db},
+		UserLimits: &UserLimitStore{db},
 	}
 }

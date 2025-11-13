@@ -20,6 +20,7 @@ type User struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	Role        Role       `json:"role"`
+	UserLimit   UserLimit  `json:"user_limit"`
 }
 
 type password struct {
@@ -47,16 +48,15 @@ type UserStore struct {
 	db *pgxpool.Pool
 }
 
-func (s *UserStore) Create(ctx context.Context, user *User) error {
+func (s *UserStore) Create(ctx context.Context, tx pgx.Tx, user *User) error {
 	query := `
-	INSERT INTO users (id, name, display_name, email, password_hash, role_id, role_name)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)
+	INSERT INTO users (name, display_name, email, password_hash, role_id, role_name)
+	VALUES ($1, $2, $3, $4, $5, $6)
 	RETURNING id, name, display_name, email, activated_at, created_at, updated_at
 	`
 
-	err := s.db.QueryRow(ctx,
+	err := tx.QueryRow(ctx,
 		query,
-		user.ID,
 		user.Name,
 		user.DisplayName,
 		user.Email,
@@ -83,10 +83,14 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	var user User
 
 	query := `
-	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
-	FROM users
-	JOIN roles ON (users.role_id = roles.id)
-	WHERE email = $1`
+		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		       roles.id, roles.name, roles.level, roles.description, roles.created_at,
+		       user_limits.user_id, user_limits.comment_limit, user_limits.create_post_limit,
+		       user_limits.created_at, user_limits.follow_limit, user_limits.like_limit, user_limits.updated_at
+		FROM users
+		JOIN roles ON (users.role_id = roles.id)
+		JOIN user_limits ON (users.id = user_limits.user_id)
+		WHERE email = $1`
 
 	err := s.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
@@ -102,6 +106,13 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 		&user.Role.Level,
 		&user.Role.Description,
 		&user.Role.CreatedAt,
+		&user.UserLimit.UserID,
+		&user.UserLimit.CommentLimit,
+		&user.UserLimit.CreatePostLimit,
+		&user.UserLimit.CreatedAt,
+		&user.UserLimit.FollowLimit,
+		&user.UserLimit.LikeLimit,
+		&user.UserLimit.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -114,10 +125,14 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 	var user User
 
 	query := `
-	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
-	FROM users
-	JOIN roles ON (users.role_id = roles.id)
-	WHERE users.name = $1`
+		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		       roles.id, roles.name, roles.level, roles.description, roles.created_at,
+		       user_limits.user_id, user_limits.comment_limit, user_limits.create_post_limit,
+		       user_limits.created_at, user_limits.follow_limit, user_limits.like_limit, user_limits.updated_at
+		FROM users
+		JOIN roles ON (users.role_id = roles.id)
+		JOIN user_limits ON (users.id = user_limits.user_id)
+		WHERE users.name = $1`
 
 	err := s.db.QueryRow(ctx, query, name).Scan(
 		&user.ID,
@@ -133,6 +148,13 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 		&user.Role.Level,
 		&user.Role.Description,
 		&user.Role.CreatedAt,
+		&user.UserLimit.UserID,
+		&user.UserLimit.CommentLimit,
+		&user.UserLimit.CreatePostLimit,
+		&user.UserLimit.CreatedAt,
+		&user.UserLimit.FollowLimit,
+		&user.UserLimit.LikeLimit,
+		&user.UserLimit.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -145,10 +167,14 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 	var user User
 
 	query := `
-	SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, updated_at, roles.*
-	FROM users
-	JOIN roles ON (users.role_id = roles.id)
-	WHERE users.id = $1`
+		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		       roles.id, roles.name, roles.level, roles.description, roles.created_at,
+		       user_limits.user_id, user_limits.comment_limit, user_limits.create_post_limit,
+		       user_limits.created_at, user_limits.follow_limit, user_limits.like_limit, user_limits.updated_at
+		FROM users
+		JOIN roles ON (users.role_id = roles.id)
+		JOIN user_limits ON (users.id = user_limits.user_id)
+		WHERE users.id = $1`
 
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
@@ -164,6 +190,13 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 		&user.Role.Level,
 		&user.Role.Description,
 		&user.Role.CreatedAt,
+		&user.UserLimit.UserID,
+		&user.UserLimit.CommentLimit,
+		&user.UserLimit.CreatePostLimit,
+		&user.UserLimit.CreatedAt,
+		&user.UserLimit.FollowLimit,
+		&user.UserLimit.LikeLimit,
+		&user.UserLimit.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -219,4 +252,28 @@ func (s *UserStore) UpdateRole(ctx context.Context, tx pgx.Tx, name string, role
 	}
 
 	return &user, nil
+}
+
+func (s *UserStore) GetIDs(ctx context.Context, limit, offset int64) ([]int, error) {
+	var userIDs []int
+	query := `
+	SELECT id
+	FROM users
+	LIMIT $1
+	OFFSET $2`
+
+	rows, err := s.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var userID int
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	return userIDs, nil
 }
