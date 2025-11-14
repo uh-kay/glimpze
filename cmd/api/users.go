@@ -1,6 +1,10 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/uh-kay/glimpze/store"
+)
 
 type UpdateUserRolePayload struct {
 	RoleName string `json:"role_name" validate:"required,min=1,max=255"`
@@ -21,20 +25,20 @@ func (app *application) updateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
 	role, err := app.store.Roles.GetByName(r.Context(), payload.RoleName)
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
 
-	user, err := app.store.Users.UpdateRole(r.Context(), tx, name, role)
+	var user *store.User
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		user, err = app.store.Users.UpdateRole(r.Context(), name, role)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return

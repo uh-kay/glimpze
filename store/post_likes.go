@@ -3,13 +3,10 @@ package store
 import (
 	"context"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostLikeStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 type PostLike struct {
@@ -18,14 +15,14 @@ type PostLike struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (s *PostLikeStore) Create(ctx context.Context, tx pgx.Tx, userID, postID int64) (*PostLike, error) {
+func (s *PostLikeStore) Create(ctx context.Context, userID, postID int64) (*PostLike, error) {
 	var postLike PostLike
 	query := `
 	INSERT INTO post_likes (user_id, post_id)
 	VALUES ($1, $2)
 	RETURNING user_id, post_id, created_at`
 
-	err := tx.QueryRow(ctx, query, userID, postID).Scan(
+	err := s.db.QueryRow(ctx, query, userID, postID).Scan(
 		&postLike.UserID,
 		&postLike.PostID,
 		&postLike.CreatedAt,
@@ -37,12 +34,12 @@ func (s *PostLikeStore) Create(ctx context.Context, tx pgx.Tx, userID, postID in
 	return &postLike, nil
 }
 
-func (s *PostLikeStore) Delete(ctx context.Context, tx pgx.Tx, userID, postID int64) error {
+func (s *PostLikeStore) Delete(ctx context.Context, userID, postID int64) error {
 	query := `
 	DELETE FROM post_likes
 	WHERE user_id = $1 AND post_id = $2`
 
-	result, err := tx.Exec(ctx, query, userID, postID)
+	result, err := s.db.Exec(ctx, query, userID, postID)
 	if err != nil {
 		return err
 	}

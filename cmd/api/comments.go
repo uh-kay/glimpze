@@ -28,20 +28,16 @@ func (app *application) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
+	var comment *store.Comment
+	var err error
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		comment, err = app.store.Comments.Create(r.Context(), payload.Content, user.ID, post.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	comment, err := app.store.Comments.Create(r.Context(), tx, payload.Content, user.ID, post.ID)
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -97,20 +93,15 @@ func (app *application) updateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
+	var comment *store.Comment
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		comment, err = app.store.Comments.Update(r.Context(), payload.Content, commentID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	comment, err := app.store.Comments.Update(r.Context(), tx, payload.Content, commentID)
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -129,19 +120,14 @@ func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err := app.store.Comments.Delete(r.Context(), commentID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	if err := app.store.Comments.Delete(r.Context(), tx, commentID); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

@@ -3,9 +3,6 @@ package store
 import (
 	"context"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostTag struct {
@@ -16,17 +13,17 @@ type PostTag struct {
 }
 
 type PostTagStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
-func (s *PostTagStore) Create(ctx context.Context, tx pgx.Tx, postID, tagID int64, tagName string) (*PostTag, error) {
+func (s *PostTagStore) Create(ctx context.Context, postID, tagID int64, tagName string) (*PostTag, error) {
 	var postTag PostTag
 	query := `
 	INSERT INTO post_tags (post_id, tag_id, tag_name)
 	VALUES ($1, $2, $3)
 	RETURNING post_id, tag_id, tag_name, created_at`
 
-	if err := tx.QueryRow(ctx, query, postID, tagID, tagName).Scan(
+	if err := s.db.QueryRow(ctx, query, postID, tagID, tagName).Scan(
 		&postTag.PostID,
 		&postTag.TagID,
 		&postTag.TagName,
@@ -38,12 +35,12 @@ func (s *PostTagStore) Create(ctx context.Context, tx pgx.Tx, postID, tagID int6
 	return &postTag, nil
 }
 
-func (s *PostTagStore) Delete(ctx context.Context, tx pgx.Tx, postID, tagID int64) error {
+func (s *PostTagStore) Delete(ctx context.Context, postID, tagID int64) error {
 	query := `
 	DELETE FROM post_tags
 	WHERE post_id = $1 AND tag_id = $2`
 
-	result, err := tx.Exec(ctx, query, postID, tagID)
+	result, err := s.db.Exec(ctx, query, postID, tagID)
 	if err != nil {
 		return err
 	}

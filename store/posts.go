@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Post struct {
@@ -19,10 +18,10 @@ type Post struct {
 }
 
 type PostStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
-func (s *PostStore) Create(ctx context.Context, tx pgx.Tx, content string, userID int64) (*Post, error) {
+func (s *PostStore) Create(ctx context.Context, content string, userID int64) (*Post, error) {
 	var post Post
 
 	query := `
@@ -30,7 +29,7 @@ func (s *PostStore) Create(ctx context.Context, tx pgx.Tx, content string, userI
 	VALUES($1, $2)
 	RETURNING id, content, user_id, created_at, updated_at`
 
-	err := tx.QueryRow(ctx, query, content, userID).Scan(
+	err := s.db.QueryRow(ctx, query, content, userID).Scan(
 		&post.ID,
 		&post.Content,
 		&post.UserID,
@@ -73,7 +72,7 @@ func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	return &post, nil
 }
 
-func (s *PostStore) Update(ctx context.Context, tx pgx.Tx, content string, id int64) (*Post, error) {
+func (s *PostStore) Update(ctx context.Context, content string, id int64) (*Post, error) {
 	var post Post
 	query := `
 	UPDATE posts
@@ -81,7 +80,7 @@ func (s *PostStore) Update(ctx context.Context, tx pgx.Tx, content string, id in
 	WHERE id = $2
 	RETURNING id, content, created_at, updated_at`
 
-	err := tx.QueryRow(ctx, query, content, id).Scan(
+	err := s.db.QueryRow(ctx, query, content, id).Scan(
 		&post.ID,
 		&post.Content,
 		&post.CreatedAt,

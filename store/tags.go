@@ -6,11 +6,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TagStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 type Tag struct {
@@ -19,14 +18,14 @@ type Tag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (s *TagStore) Create(ctx context.Context, tx pgx.Tx, name string) (*Tag, error) {
+func (s *TagStore) Create(ctx context.Context, name string) (*Tag, error) {
 	var tag Tag
 	query := `
 	INSERT INTO tags(name)
 	VALUES ($1)
 	RETURNING id, name, created_at`
 
-	if err := tx.QueryRow(ctx, query, name).Scan(
+	if err := s.db.QueryRow(ctx, query, name).Scan(
 		&tag.ID,
 		&tag.Name,
 		&tag.CreatedAt,
@@ -83,12 +82,12 @@ func (s *TagStore) GetByName(ctx context.Context, name string) (*Tag, error) {
 	return &tag, nil
 }
 
-func (s *TagStore) Delete(ctx context.Context, tx pgx.Tx, id int64) error {
+func (s *TagStore) Delete(ctx context.Context, id int64) error {
 	query := `
 	DELETE FROM tags
 	WHERE id = $1`
 
-	result, err := tx.Exec(ctx, query, id)
+	result, err := s.db.Exec(ctx, query, id)
 	if err != nil {
 		return err
 	}

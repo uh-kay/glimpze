@@ -30,21 +30,23 @@ func createAdminAccount(db *pgxpool.Pool, queries store.Storage) {
 		log.Println(err)
 	}
 
-	tx, err := db.Begin(context.Background())
+	err = queries.WithTx(context.Background(), func(s *store.Storage) error {
+		if err := queries.Users.Create(context.Background(), &user); err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		log.Println(err)
 	}
-	defer tx.Rollback(context.Background())
 
-	if err := queries.Users.Create(context.Background(), tx, &user); err != nil {
-		log.Println(err)
-	}
-
-	if _, err := queries.UserLimits.Create(context.Background(), tx, user.ID); err != nil {
-		log.Println(err)
-	}
-
-	if err := tx.Commit(context.Background()); err != nil {
+	err = queries.WithTx(context.Background(), func(s *store.Storage) error {
+		if _, err := queries.UserLimits.Create(context.Background(), user.ID); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		log.Println(err)
 	}
 }
@@ -75,21 +77,23 @@ func createUserAccount(db *pgxpool.Pool, queries store.Storage) {
 			log.Println(err)
 		}
 
-		tx, err := db.Begin(context.Background())
+		err = queries.WithTx(context.Background(), func(s *store.Storage) error {
+			if err := queries.Users.Create(context.Background(), &user); err != nil {
+				return err
+			}
+			return nil
+		})
 		if err != nil {
 			log.Println(err)
 		}
-		defer tx.Rollback(context.Background())
 
-		if err := queries.Users.Create(context.Background(), tx, &user); err != nil {
-			log.Println(err)
-		}
-
-		if _, err := queries.UserLimits.Create(context.Background(), tx, user.ID); err != nil {
-			log.Println(err)
-		}
-
-		if err := tx.Commit(context.Background()); err != nil {
+		err = queries.WithTx(context.Background(), func(s *store.Storage) error {
+			if _, err := queries.UserLimits.Create(context.Background(), user.ID); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			log.Println(err)
 		}
 	}

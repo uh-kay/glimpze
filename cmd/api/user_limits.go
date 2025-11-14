@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/uh-kay/glimpze/store"
 )
 
 func (app *application) updateUserLimits(ctx context.Context) error {
@@ -71,28 +73,17 @@ func (app *application) batchUpdateUserLimit(ctx context.Context) error {
 }
 
 func (app *application) updateBatch(ctx context.Context, userIDs []int) error {
-	tx, err := app.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	committed := false
-	defer func() {
-		if !committed {
-			tx.Rollback(ctx)
-		}
-	}()
-
 	for _, userID := range userIDs {
-		if _, err := app.store.UserLimits.Add(ctx, tx, int64(userID)); err != nil {
-			return fmt.Errorf("failed to update user %d: %w", userID, err)
+		err := app.store.WithTx(ctx, func(s *store.Storage) error {
+			if _, err := app.store.UserLimits.Add(ctx, int64(userID)); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	committed = true
 	return nil
 }

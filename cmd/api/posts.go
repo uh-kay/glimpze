@@ -53,23 +53,20 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	post, err := app.store.Posts.Create(r.Context(), tx, content, user.ID)
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
+	var post *store.Post
+	var err error
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		post, err = s.Posts.Create(r.Context(), content, user.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	postFileRecords := make([]any, 0, len(files))
 
 	for _, fileHeader := range files {
-		postFileRecord, _, err := app.processFileUpload(r.Context(), tx, fileHeader, post.ID)
+		postFileRecord, _, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
@@ -77,13 +74,14 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		postFileRecords = append(postFileRecords, postFileRecord)
 	}
 
-	err = app.store.UserLimits.Reduce(r.Context(), tx, user.ID, "create_post_limit")
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err = app.store.UserLimits.Reduce(r.Context(), user.ID, "create_post_limit")
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err = tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -128,7 +126,14 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	postFiles, err := app.store.PostFiles.GetByPostID(r.Context(), tx, post.ID)
+	var postFiles []*store.PostFile
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		postFiles, err = app.store.PostFiles.GetByPostID(r.Context(), post.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
@@ -190,13 +195,15 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-	post, err := app.store.Posts.Update(r.Context(), tx, content, int64(postID))
+
+	var post *store.Post
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		post, err = app.store.Posts.Update(r.Context(), content, int64(postID))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
@@ -206,7 +213,13 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 	var oldPostFiles []*store.PostFile
 
 	if len(files) > 0 {
-		oldPostFiles, err = app.store.PostFiles.GetByPostID(r.Context(), tx, post.ID)
+		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+			oldPostFiles, err = app.store.PostFiles.GetByPostID(r.Context(), post.ID)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
@@ -216,7 +229,7 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		filenames := make([]string, 0, len(files))
 
 		for _, fileHeader := range files {
-			postFileRecord, filename, err := app.processFileUpload(r.Context(), tx, fileHeader, post.ID)
+			postFileRecord, filename, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
 			if err != nil {
 				app.cleanupUploadedFiles(r.Context(), filenames)
 				app.internalServerError(w, r, err)
@@ -227,18 +240,18 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, val := range oldPostFiles {
-			err = app.store.PostFiles.Delete(r.Context(), tx, val.FileID)
+			err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+				err = app.store.PostFiles.Delete(r.Context(), val.FileID)
+				if err != nil {
+					return err
+				}
+				return nil
+			})
 			if err != nil {
 				app.cleanupUploadedFiles(r.Context(), filenames)
 				app.internalServerError(w, r, err)
 				return
 			}
-		}
-
-		if err = tx.Commit(r.Context()); err != nil {
-			app.cleanupUploadedFiles(r.Context(), filenames)
-			app.internalServerError(w, r, err)
-			return
 		}
 
 		for _, val := range oldPostFiles {
@@ -248,7 +261,13 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		oldPostFiles, err = app.store.PostFiles.GetByPostID(r.Context(), tx, post.ID)
+		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+			oldPostFiles, err = app.store.PostFiles.GetByPostID(r.Context(), post.ID)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
@@ -256,11 +275,6 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		postFileRecords = make([]any, len(oldPostFiles))
 		for i, f := range oldPostFiles {
 			postFileRecords[i] = f
-		}
-
-		if err = tx.Commit(r.Context()); err != nil {
-			app.internalServerError(w, r, err)
-			return
 		}
 	}
 
@@ -288,14 +302,29 @@ func (app *application) deletePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	postFiles, err := app.store.PostFiles.GetByPostID(r.Context(), tx, int64(postID))
+	var postFiles []*store.PostFile
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		postFiles, err = app.store.PostFiles.GetByPostID(r.Context(), int64(postID))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
 
 	for _, val := range postFiles {
-		if err = app.store.PostFiles.Delete(r.Context(), tx, val.FileID); err != nil {
+		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+
+			err = app.store.PostFiles.Delete(r.Context(), val.FileID)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			app.internalServerError(w, r, err)
 			return
 		}
@@ -361,7 +390,7 @@ func (app *application) getContentType(fileHeader *multipart.FileHeader) (string
 	return http.DetectContentType(buffer[:n]), nil
 }
 
-func (app *application) processFileUpload(ctx context.Context, tx pgx.Tx, fileHeader *multipart.FileHeader, postID int64) (*store.PostFile, string, error) {
+func (app *application) processFileUpload(ctx context.Context, fileHeader *multipart.FileHeader, postID int64) (*store.PostFile, string, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, "", err
@@ -376,12 +405,19 @@ func (app *application) processFileUpload(ctx context.Context, tx pgx.Tx, fileHe
 		return nil, "", err
 	}
 
-	postfile, err := app.store.PostFiles.Create(ctx, tx, fileID, fileExt, fileHeader.Filename, postID)
+	var postFile *store.PostFile
+	err = app.store.WithTx(ctx, func(s *store.Storage) error {
+		postFile, err = app.store.PostFiles.Create(ctx, fileID, fileExt, fileHeader.Filename, postID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, "", err
 	}
 
-	return postfile, filename, nil
+	return postFile, filename, nil
 }
 
 func (app *application) cleanupUploadedFiles(ctx context.Context, filenames []string) {
@@ -423,14 +459,15 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromContext(r)
 	post := getPostFromContext(r)
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	postLike, err := app.store.PostLikes.Create(r.Context(), tx, user.ID, post.ID)
+	var err error
+	var postLike *store.PostLike
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		postLike, err = app.store.PostLikes.Create(r.Context(), user.ID, post.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -446,11 +483,6 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := tx.Commit(r.Context()); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
 	app.jsonResponse(w, http.StatusCreated, envelope{
 		Message: "like added",
 		Data:    postLike,
@@ -460,22 +492,16 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 func (app *application) removeLike(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromContext(r)
 	post := getPostFromContext(r)
-	fmt.Printf("user: %v\n", user)
-	fmt.Printf("post: %v\n", post)
 
-	tx, err := app.db.Begin(r.Context())
+	var err error
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err = app.store.PostLikes.Delete(r.Context(), user.ID, post.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	if err := app.store.PostLikes.Delete(r.Context(), tx, user.ID, post.ID); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

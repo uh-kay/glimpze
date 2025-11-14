@@ -5,12 +5,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostFileStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 type PostFile struct {
@@ -21,14 +19,14 @@ type PostFile struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
-func (s *PostFileStore) Create(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error) {
+func (s *PostFileStore) Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error) {
 	var postFile PostFile
 	query := `
 	INSERT INTO post_files(file_id, file_extension, original_filename, post_id)
 	VALUES($1, $2, $3, $4)
 	RETURNING file_id, file_extension, original_filename, post_id, created_at`
 
-	err := tx.QueryRow(ctx, query, fileID, fileExtension, originalFilename, postID).Scan(
+	err := s.db.QueryRow(ctx, query, fileID, fileExtension, originalFilename, postID).Scan(
 		&postFile.FileID,
 		&postFile.FileExtension,
 		&postFile.OriginalFilename,
@@ -42,7 +40,7 @@ func (s *PostFileStore) Create(ctx context.Context, tx pgx.Tx, fileID uuid.UUID,
 	return &postFile, nil
 }
 
-func (s *PostFileStore) GetByPostID(ctx context.Context, tx pgx.Tx, postID int64) ([]*PostFile, error) {
+func (s *PostFileStore) GetByPostID(ctx context.Context, postID int64) ([]*PostFile, error) {
 
 	var postFiles []*PostFile
 
@@ -51,7 +49,7 @@ func (s *PostFileStore) GetByPostID(ctx context.Context, tx pgx.Tx, postID int64
 	FROM post_files
 	WHERE post_id = $1`
 
-	rows, err := tx.Query(ctx, query, postID)
+	rows, err := s.db.Query(ctx, query, postID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +92,7 @@ func (s *PostFileStore) GetByPostID(ctx context.Context, tx pgx.Tx, postID int64
 // 	return &postFile, nil
 // }
 
-func (s *PostFileStore) Delete(ctx context.Context, tx pgx.Tx, fileID uuid.UUID) error {
+func (s *PostFileStore) Delete(ctx context.Context, fileID uuid.UUID) error {
 	query := `
 	DELETE FROM post_files
 	WHERE file_id = $1`

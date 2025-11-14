@@ -26,14 +26,15 @@ func (app *application) createTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	tag, err := app.store.Tags.Create(r.Context(), tx, payload.Name)
+	var tag *store.Tag
+	var err error
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		tag, err = app.store.Tags.Create(r.Context(), payload.Name)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -45,11 +46,6 @@ func (app *application) createTag(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -93,19 +89,14 @@ func (app *application) deleteTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err = app.store.Tags.Delete(r.Context(), tagID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	if err := app.store.Tags.Delete(r.Context(), tx, tagID); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -133,13 +124,6 @@ func (app *application) addTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
 	tag, err := app.store.Tags.GetByName(r.Context(), payload.Name)
 	if err != nil {
 		switch {
@@ -151,7 +135,14 @@ func (app *application) addTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	postTag, err := app.store.PostTags.Create(r.Context(), tx, postID, tag.ID, tag.Name)
+	var postTag *store.PostTag
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		postTag, err = app.store.PostTags.Create(r.Context(), postID, tag.ID, tag.Name)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -171,11 +162,6 @@ func (app *application) addTag(w http.ResponseWriter, r *http.Request) {
 		default:
 			app.internalServerError(w, r, err)
 		}
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
-		app.internalServerError(w, r, err)
 		return
 	}
 
@@ -200,19 +186,14 @@ func (app *application) removeTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err := app.store.PostTags.Delete(r.Context(), postID, tagID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	if err := app.store.PostTags.Delete(r.Context(), tx, postID, tagID); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

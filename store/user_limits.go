@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserLimitStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 type UserLimit struct {
@@ -24,14 +23,14 @@ type UserLimit struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-func (s *UserLimitStore) Create(ctx context.Context, tx pgx.Tx, userID int64) (*UserLimit, error) {
+func (s *UserLimitStore) Create(ctx context.Context, userID int64) (*UserLimit, error) {
 	var userLimit UserLimit
 	query := `
 	INSERT INTO user_limits (user_id)
 	VALUES ($1)
 	RETURNING user_id, create_post_limit, comment_limit, like_limit, follow_limit, created_at, updated_at`
 
-	err := tx.QueryRow(ctx, query, userID).Scan(
+	err := s.db.QueryRow(ctx, query, userID).Scan(
 		&userLimit.UserID,
 		&userLimit.CreatePostLimit,
 		&userLimit.CommentLimit,
@@ -47,7 +46,7 @@ func (s *UserLimitStore) Create(ctx context.Context, tx pgx.Tx, userID int64) (*
 	return &userLimit, nil
 }
 
-func (s *UserLimitStore) Add(ctx context.Context, tx pgx.Tx, userID int64) (*UserLimit, error) {
+func (s *UserLimitStore) Add(ctx context.Context, userID int64) (*UserLimit, error) {
 	var userLimit UserLimit
 	query := `
 	UPDATE user_limits
@@ -59,7 +58,7 @@ func (s *UserLimitStore) Add(ctx context.Context, tx pgx.Tx, userID int64) (*Use
 	RETURNING user_id, create_post_limit, comment_limit, like_limit, follow_limit, created_at, updated_at
 	`
 
-	err := tx.QueryRow(ctx, query, userID).Scan(
+	err := s.db.QueryRow(ctx, query, userID).Scan(
 		&userLimit.UserID,
 		&userLimit.CreatePostLimit,
 		&userLimit.CommentLimit,
@@ -80,7 +79,7 @@ func (s *UserLimitStore) Add(ctx context.Context, tx pgx.Tx, userID int64) (*Use
 	return &userLimit, nil
 }
 
-func (s *UserLimitStore) Reduce(ctx context.Context, tx pgx.Tx, userID int64, limitType string) error {
+func (s *UserLimitStore) Reduce(ctx context.Context, userID int64, limitType string) error {
 	validLimits := map[string]bool{
 		"create_post_limit": true,
 		"comment_limit":     true,
@@ -96,7 +95,7 @@ func (s *UserLimitStore) Reduce(ctx context.Context, tx pgx.Tx, userID int64, li
 	SET %s = %s - 1
 	WHERE user_id = $1 AND %s > 0`, limitType, limitType, limitType)
 
-	result, err := tx.Exec(ctx, query, userID)
+	result, err := s.db.Exec(ctx, query, userID)
 	if err != nil {
 		return err
 	}

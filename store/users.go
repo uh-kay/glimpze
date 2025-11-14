@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -45,17 +44,17 @@ func (p *password) Compare(password string) error {
 }
 
 type UserStore struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
-func (s *UserStore) Create(ctx context.Context, tx pgx.Tx, user *User) error {
+func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 	INSERT INTO users (name, display_name, email, password_hash, role_id, role_name)
 	VALUES ($1, $2, $3, $4, $5, $6)
 	RETURNING id, name, display_name, email, activated_at, created_at, updated_at
 	`
 
-	err := tx.QueryRow(ctx,
+	err := s.db.QueryRow(ctx,
 		query,
 		user.Name,
 		user.DisplayName,
@@ -205,7 +204,7 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 	return &user, nil
 }
 
-func (s *UserStore) UpdateRole(ctx context.Context, tx pgx.Tx, name string, role *Role) (*User, error) {
+func (s *UserStore) UpdateRole(ctx context.Context, name string, role *Role) (*User, error) {
 	var user User
 	query := `
 	WITH updated AS (
@@ -230,7 +229,7 @@ func (s *UserStore) UpdateRole(ctx context.Context, tx pgx.Tx, name string, role
 	FROM updated
 	JOIN roles ON (updated.role_id = roles.id)`
 
-	err := tx.QueryRow(ctx, query, role.ID, role.Name, name).Scan(
+	err := s.db.QueryRow(ctx, query, role.ID, role.Name, name).Scan(
 		&user.ID,
 		&user.Name,
 		&user.DisplayName,

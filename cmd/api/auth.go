@@ -89,14 +89,14 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	err = app.store.Users.Create(r.Context(), tx, user)
+	var err error
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		err = app.store.Users.Create(r.Context(), user)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -114,16 +114,14 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userLimit, err := app.store.UserLimits.Create(r.Context(), tx, user.ID)
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
+	var userLimit *store.UserLimit
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		userLimit, err = app.store.UserLimits.Create(r.Context(), user.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
 		Message: "user registered",
