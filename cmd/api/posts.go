@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/uh-kay/glimpze/store"
 )
 
@@ -416,4 +417,68 @@ func (app *application) postContextMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), postCtx, post)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+	post := getPostFromContext(r)
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	postLike, err := app.store.PostLikes.Create(r.Context(), tx, user.ID, post.ID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case "post_likes_pkey":
+				app.badRequestResponse(w, r, ErrDuplicateLike)
+			default:
+				app.internalServerError(w, r, err)
+			}
+			return
+		}
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusCreated, envelope{
+		Message: "like added",
+		Data:    postLike,
+	})
+}
+
+func (app *application) removeLike(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+	post := getPostFromContext(r)
+	fmt.Printf("user: %v\n", user)
+	fmt.Printf("post: %v\n", post)
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	if err := app.store.PostLikes.Delete(r.Context(), tx, user.ID, post.ID); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

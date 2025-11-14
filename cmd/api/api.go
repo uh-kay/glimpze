@@ -104,6 +104,12 @@ func (app *application) mount() http.Handler {
 				r.Patch("/{postID}", app.checkPostOwnership("moderator", app.updatePost))
 				r.Delete("/{postID}", app.checkPostOwnership("admin", app.deletePost))
 
+				r.Route("/{postID}/likes", func(r chi.Router) {
+					r.Use(app.postContextMiddleware)
+					r.Post("/", app.addLike)
+					r.Delete("/", app.removeLike)
+				})
+
 				r.Route("/{postID}/tags", func(r chi.Router) {
 					r.Post("/", app.addTag)
 					r.Get("/", app.listTag)

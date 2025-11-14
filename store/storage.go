@@ -62,6 +62,10 @@ type Storage struct {
 		Add(ctx context.Context, tx pgx.Tx, userID int64) (*UserLimit, error)
 		Reduce(ctx context.Context, tx pgx.Tx, userID int64, limitType string) error
 	}
+	PostLikes interface {
+		Create(ctx context.Context, tx pgx.Tx, userID, postID int64) (*PostLike, error)
+		Delete(ctx context.Context, tx pgx.Tx, userID, postID int64) error
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
@@ -74,5 +78,6 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		Roles:      &RoleStore{db},
 		Comments:   &CommentStore{db},
 		UserLimits: &UserLimitStore{db},
+		PostLikes:  &PostLikeStore{db},
 	}
 }

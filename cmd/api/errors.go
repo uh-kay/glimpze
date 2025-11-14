@@ -8,6 +8,7 @@ import (
 var (
 	ErrDuplicateEmail = errors.New("email already exists")
 	ErrDuplicateName  = errors.New("username already exists")
+	ErrDuplicateLike  = errors.New("can't like a post twice")
 )
 
 func (app *application) internalServerError(w http.ResponseWriter, r *http.Request, err error) {

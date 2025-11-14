@@ -12,10 +12,10 @@ import (
 type Post struct {
 	ID        int64     `json:"id"`
 	Content   string    `json:"content"`
-	Likes     int64     `json:"likes"`
 	UserID    int64     `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Likes     int64     `json:"likes"`
 }
 
 type PostStore struct {
@@ -28,12 +28,11 @@ func (s *PostStore) Create(ctx context.Context, tx pgx.Tx, content string, userI
 	query := `
 	INSERT INTO posts (content, user_id)
 	VALUES($1, $2)
-	RETURNING id, content, likes, user_id, created_at, updated_at`
+	RETURNING id, content, user_id, created_at, updated_at`
 
 	err := tx.QueryRow(ctx, query, content, userID).Scan(
 		&post.ID,
 		&post.Content,
-		&post.Likes,
 		&post.UserID,
 		&post.CreatedAt,
 		&post.UpdatedAt,
@@ -48,17 +47,19 @@ func (s *PostStore) Create(ctx context.Context, tx pgx.Tx, content string, userI
 func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	var post Post
 	query := `
-	SELECT id, content, likes, user_id, created_at, updated_at
-	FROM posts
-	WHERE id = $1`
+	SELECT p.id, p.content, p.user_id, p.created_at, p.updated_at, COUNT(pl.post_id)
+	FROM posts p
+	LEFT JOIN post_likes pl ON pl.post_id = p.id
+	WHERE p.id = $1
+	GROUP BY p.id`
 
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&post.ID,
 		&post.Content,
-		&post.Likes,
 		&post.UserID,
 		&post.CreatedAt,
 		&post.UpdatedAt,
+		&post.Likes,
 	)
 	if err != nil {
 		switch {
@@ -78,12 +79,11 @@ func (s *PostStore) Update(ctx context.Context, tx pgx.Tx, content string, id in
 	UPDATE posts
 	SET content = $1
 	WHERE id = $2
-	RETURNING id, content, likes, created_at, updated_at`
+	RETURNING id, content, created_at, updated_at`
 
 	err := tx.QueryRow(ctx, query, content, id).Scan(
 		&post.ID,
 		&post.Content,
-		&post.Likes,
 		&post.CreatedAt,
 		&post.UpdatedAt,
 	)
