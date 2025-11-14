@@ -101,28 +101,29 @@ func (app *application) mount() http.Handler {
 				r.Use(app.AuthMiddleware)
 
 				r.Post("/", app.checkResourceAccessWithLimit("user", CreatePostLimit, app.createPost))
-				r.Patch("/{postID}", app.checkPostOwnership("moderator", app.updatePost))
-				r.Delete("/{postID}", app.checkPostOwnership("admin", app.deletePost))
-
-				r.Route("/{postID}/likes", func(r chi.Router) {
+				r.Route("/{postID}", func(r chi.Router) {
 					r.Use(app.postContextMiddleware)
-					r.Post("/", app.addLike)
-					r.Delete("/", app.removeLike)
-				})
+					r.Patch("/", app.checkPostOwnership("moderator", app.updatePost))
+					r.Delete("/", app.checkPostOwnership("admin", app.deletePost))
 
-				r.Route("/{postID}/tags", func(r chi.Router) {
-					r.Post("/", app.addTag)
-					r.Get("/", app.listTag)
-					r.Delete("/{tagID}", app.removeTag)
-				})
+					r.Route("/likes", func(r chi.Router) {
+						r.Post("/", app.addLike)
+						r.Delete("/", app.removeLike)
+					})
 
-				r.Route("/{postID}/comments", func(r chi.Router) {
-					r.Use(app.postContextMiddleware)
-					// r.Get("/", app.listComment)
-					r.Post("/", app.createComment)
-					r.Get("/{commentID}", app.getComment)
-					r.Patch("/{commentID}", app.updateComment)
-					r.Delete("/{commentID}", app.deleteComment)
+					r.Route("/tags", func(r chi.Router) {
+						r.Post("/", app.addTag)
+						r.Get("/", app.listTag)
+						r.Delete("/{tagID}", app.removeTag)
+					})
+
+					r.Route("/comments", func(r chi.Router) {
+						// r.Get("/", app.listComment)
+						r.Post("/", app.createComment)
+						r.Get("/{commentID}", app.getComment)
+						r.Patch("/{commentID}", app.updateComment)
+						r.Delete("/{commentID}", app.deleteComment)
+					})
 				})
 			})
 		})

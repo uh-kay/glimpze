@@ -10,9 +10,15 @@ CREATE TABLE IF NOT EXISTS user_limits (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TRIGGER update_user_limits_updated_at
+BEFORE UPDATE ON user_limits
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
+DROP TRIGGER IF EXISTS update_user_limits_updated_at ON user_limits;
 DROP TABLE IF EXISTS user_limits;
 -- +goose StatementEnd
