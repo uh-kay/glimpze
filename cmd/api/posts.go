@@ -108,13 +108,6 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
 	post, err := app.store.Posts.GetByID(r.Context(), postID)
 	if err != nil {
 		switch {
@@ -295,13 +288,6 @@ func (app *application) deletePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := app.db.Begin(r.Context())
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
 	var postFiles []*store.PostFile
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
 		postFiles, err = app.store.PostFiles.GetByPostID(r.Context(), int64(postID))
@@ -332,11 +318,6 @@ func (app *application) deletePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = app.store.Posts.Delete(r.Context(), int64(postID)); err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	if err = tx.Commit(r.Context()); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
