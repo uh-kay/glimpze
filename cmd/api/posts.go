@@ -62,6 +62,10 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
 
 	postFileRecords := make([]any, 0, len(files))
 

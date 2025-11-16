@@ -75,6 +75,7 @@ type Storage struct {
 
 func NewStorage(db *pgxpool.Pool) Storage {
 	return Storage{
+		db:         db,
 		Posts:      &PostStore{db},
 		Users:      &UserStore{db},
 		PostFiles:  &PostFileStore{db},
@@ -84,6 +85,7 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		Comments:   &CommentStore{db},
 		UserLimits: &UserLimitStore{db},
 		PostLikes:  &PostLikeStore{db},
+		Followers:  &FollowerStore{db},
 	}
 }
 
@@ -110,6 +112,7 @@ func (s *Storage) WithTx(ctx context.Context, fn func(*Storage) error) error {
 		PostTags:   &PostTagStore{db: tx},
 		Comments:   &CommentStore{db: tx},
 		PostLikes:  &PostLikeStore{db: tx},
+		Followers:  &FollowerStore{db: tx},
 	}
 
 	if err := fn(txStorage); err != nil {

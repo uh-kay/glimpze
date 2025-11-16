@@ -87,11 +87,6 @@ func (app *application) mount() http.Handler {
 			r.Post("/login", app.login)
 			r.Post("/register", app.register)
 			r.Post("/token/refresh", app.refreshToken)
-
-			r.Route("/profile", func(r chi.Router) {
-				r.Use(app.AuthMiddleware)
-				r.Get("/", app.profile)
-			})
 		})
 
 		r.Route("/posts", func(r chi.Router) {
@@ -140,6 +135,10 @@ func (app *application) mount() http.Handler {
 			r.Use(app.AuthMiddleware)
 
 			r.Patch("/{userName}", app.checkResourceAccess("admin", app.updateUserRole))
+			r.Get("/{userID}", app.profile)
+			r.Get("/", app.profile)
+			r.Put("/{userID}/follow", app.followUser)
+			r.Put("/{userID}/unfollow", app.unfollowUser)
 		})
 	})
 

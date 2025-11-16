@@ -132,15 +132,6 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) profile(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromContext(r)
-
-	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    user,
-	})
-}
-
 func getUserFromContext(r *http.Request) *store.User {
 	return r.Context().Value(userCtx).(*store.User)
 }

@@ -84,6 +84,7 @@ func (s *UserLimitStore) Reduce(ctx context.Context, userID int64, limitType str
 		"create_post_limit": true,
 		"comment_limit":     true,
 		"like_limit":        true,
+		"follow_limit":      true,
 	}
 
 	if !validLimits[limitType] {
