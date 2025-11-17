@@ -109,3 +109,99 @@ func (s *PostStore) Delete(ctx context.Context, id int64) error {
 
 	return nil
 }
+
+type PostWithMetadata struct {
+	Post         Post
+	CommentCount int64
+}
+
+func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64) ([]*PostWithMetadata, error) {
+	var postsWithMetadata []*PostWithMetadata
+	query := `
+	SELECT
+    	p.id,
+     	p.content,
+      	p.user_id,
+       	p.created_at,
+        p.updated_at,
+        COUNT(DISTINCT pl.post_id) AS like_count,
+        COUNT(DISTINCT c.id) AS comment_count
+    FROM posts p
+    LEFT JOIN comments c ON c.post_id = p.id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    WHERE
+    	p.user_id = $1
+     	OR p.user_id IN (
+        	SELECT user_id
+         	FROM followers
+          	WHERE follower_id = $1
+        )
+    GROUP BY p.id, p.content, p.user_id, p.created_at, p.updated_at
+    ORDER BY p.created_at DESC
+    LIMIT $2 OFFSET $3;`
+
+	rows, err := s.db.Query(ctx, query, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var postWithMetadata PostWithMetadata
+		if err := rows.Scan(
+			&postWithMetadata.Post.ID,
+			&postWithMetadata.Post.Content,
+			&postWithMetadata.Post.UserID,
+			&postWithMetadata.Post.CreatedAt,
+			&postWithMetadata.Post.UpdatedAt,
+			&postWithMetadata.Post.Likes,
+			&postWithMetadata.CommentCount,
+		); err != nil {
+			return nil, err
+		}
+		postsWithMetadata = append(postsWithMetadata, &postWithMetadata)
+	}
+
+	return postsWithMetadata, nil
+}
+
+func (s *PostStore) GetPublicFeed(ctx context.Context, limit, offset int64) ([]*PostWithMetadata, error) {
+	var postsWithMetadata []*PostWithMetadata
+	query := `
+	SELECT
+		p.id,
+     	p.content,
+      	p.user_id,
+       	p.created_at,
+        p.updated_at,
+        COUNT(DISTINCT pl.post_id) AS like_count,
+        COUNT(DISTINCT c.id) AS comment_count
+    FROM posts p
+    LEFT JOIN comments c ON c.post_id = p.id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    GROUP BY p.id, p.content, p.user_id, p.created_at, p.updated_at
+    ORDER BY like_count DESC, p.created_at DESC
+    LIMIT $1 OFFSET $2`
+
+	rows, err := s.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var postWithMetadata PostWithMetadata
+		if err := rows.Scan(
+			&postWithMetadata.Post.ID,
+			&postWithMetadata.Post.Content,
+			&postWithMetadata.Post.UserID,
+			&postWithMetadata.Post.CreatedAt,
+			&postWithMetadata.Post.UpdatedAt,
+			&postWithMetadata.Post.Likes,
+			&postWithMetadata.CommentCount,
+		); err != nil {
+			return nil, err
+		}
+		postsWithMetadata = append(postsWithMetadata, &postWithMetadata)
+	}
+
+	return postsWithMetadata, nil
+}

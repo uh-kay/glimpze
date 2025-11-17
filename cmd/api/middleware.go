@@ -184,3 +184,49 @@ func (app *application) checkResourceAccessWithLimit(requiredRole string, limitT
 		next.ServeHTTP(w, r)
 	})
 }
+
+func (app *application) optionalAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var tokenStr string
+
+		cookie, err := r.Cookie("access_token")
+		if err == nil && cookie != nil {
+			tokenStr = cookie.Value
+		}
+
+		if tokenStr == "" {
+			tokenStr = bearerFromHeader(r)
+		}
+		if tokenStr == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		claims, err := auth.ParseAccess(tokenStr)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		userIDStr, err := app.cache.Sessions.GetUser(r.Context(), "access:"+claims.ID)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		userID, err := strconv.Atoi(userIDStr)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		user, err := app.store.Users.GetByID(r.Context(), int64(userID))
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userCtx, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}

@@ -133,7 +133,11 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserFromContext(r *http.Request) *store.User {
-	return r.Context().Value(userCtx).(*store.User)
+	user, ok := r.Context().Value(userCtx).(*store.User)
+	if !ok {
+		return nil
+	}
+	return user
 }
 
 func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +170,39 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetAuthCookies(w, toks)
 	app.jsonResponse(w, http.StatusCreated, envelope{
+		Message: "success",
+		Data:    nil,
+	})
+}
+
+func (app *application) logout(w http.ResponseWriter, r *http.Request) {
+	accessCookie, err := r.Cookie("access_token")
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	acc := accessCookie.Value
+
+	refreshCookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	ref := refreshCookie.Value
+
+	if acc != "" {
+		if claims, err := auth.ParseAccess(acc); err == nil {
+			_ = app.cache.Sessions.Delete(r.Context(), "access"+claims.ID)
+		}
+	}
+
+	if ref != "" {
+		if claims, err := auth.ParseRefresh(ref); err == nil {
+			_ = app.cache.Sessions.Delete(r.Context(), "refresh"+claims.ID)
+		}
+	}
+	auth.ClearAuthCookies(w)
+	app.jsonResponse(w, http.StatusOK, envelope{
 		Message: "success",
 		Data:    nil,
 	})

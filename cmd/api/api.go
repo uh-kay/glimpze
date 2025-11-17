@@ -83,10 +83,16 @@ func (app *application) mount() http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthcheck)
 
+		r.Group(func(r chi.Router) {
+			r.Use(app.optionalAuthMiddleware)
+			r.Get("/", app.userFeed)
+		})
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", app.login)
 			r.Post("/register", app.register)
 			r.Post("/token/refresh", app.refreshToken)
+			r.Post("/logout", app.logout)
 		})
 
 		r.Route("/posts", func(r chi.Router) {
