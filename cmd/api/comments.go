@@ -134,3 +134,44 @@ func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (app *application) listComment(w http.ResponseWriter, r *http.Request) {
+	post := getPostFromContext(r)
+
+	sortBy := r.URL.Query().Get("sortby")
+	if sortBy == "" {
+		sortBy = "newest"
+	}
+
+	validSortBy := map[string]bool{
+		"oldest":  true,
+		"popular": true,
+		"newest":  true,
+	}
+
+	if !validSortBy[sortBy] {
+		app.badRequestResponse(w, r, errors.New("invalid sort by"))
+		return
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	page, err := strconv.ParseInt(pageStr, 10, 64)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	commentCount, comments, err := app.store.Comments.List(r.Context(), post.ID, sortBy, 20, (page-1)*20)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		Message: "success",
+		Data: map[string]any{
+			"comment_count": commentCount,
+			"comments":      comments,
+		},
+	})
+}

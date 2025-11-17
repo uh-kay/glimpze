@@ -118,3 +118,53 @@ func (s *CommentStore) Delete(ctx context.Context, commentID int64) error {
 
 	return nil
 }
+
+func (s *CommentStore) List(ctx context.Context, postID int64, sortBy string, limit, offset int64) (int64, []*Comment, error) {
+	var count int64
+	query := `SELECT COUNT(*) FROM comments WHERE post_id = $1`
+	if err := s.db.QueryRow(ctx, query, postID).Scan(&count); err != nil {
+		return -1, nil, err
+	}
+
+	var comments []*Comment
+	query = `
+	SELECT id, post_id, user_id, parent_comment_id, content, likes, created_at, updated_at
+	FROM comments
+	WHERE post_id = $1`
+
+	switch sortBy {
+	case "oldest":
+		query += " ORDER BY created_at ASC"
+	case "popular":
+		query += " ORDER BY likes DESC"
+	default:
+		query += " ORDER BY created_at DESC"
+	}
+
+	query += " LIMIT $2 OFFSET $3"
+
+	rows, err := s.db.Query(ctx, query, postID, limit, offset)
+	if err != nil {
+		return -1, nil, err
+	}
+
+	for rows.Next() {
+		var comment Comment
+		if err := rows.Scan(
+			&comment.ID,
+			&comment.PostID,
+			&comment.UserID,
+			&comment.ParentCommentID,
+			&comment.Content,
+			&comment.Likes,
+			&comment.CreatedAt,
+			&comment.UpdatedAt,
+		); err != nil {
+			return -1, nil, err
+		}
+
+		comments = append(comments, &comment)
+	}
+
+	return count, comments, nil
+}

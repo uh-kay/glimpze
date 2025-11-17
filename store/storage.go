@@ -58,6 +58,7 @@ type Storage struct {
 		GetByID(ctx context.Context, commentID int64) (*Comment, error)
 		Update(ctx context.Context, content string, commentID int64) (*Comment, error)
 		Delete(ctx context.Context, commentID int64) error
+		List(ctx context.Context, postID int64, sortBy string, limit, offset int64) (int64, []*Comment, error)
 	}
 	UserLimits interface {
 		Create(ctx context.Context, userID int64) (*UserLimit, error)

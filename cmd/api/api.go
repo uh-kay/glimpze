@@ -115,7 +115,7 @@ func (app *application) mount() http.Handler {
 					})
 
 					r.Route("/comments", func(r chi.Router) {
-						// r.Get("/", app.listComment)
+						r.Get("/", app.listComment)
 						r.Post("/", app.createComment)
 						r.Get("/{commentID}", app.getComment)
 						r.Patch("/{commentID}", app.updateComment)
