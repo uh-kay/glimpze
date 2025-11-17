@@ -106,7 +106,7 @@ func (app *application) followUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		err = app.store.UserLimits.Reduce(r.Context(), user.ID, "follow_limit")
+		err = app.store.UserLimits.Decrement(r.Context(), user.ID, "follow_limit")
 		if err != nil {
 			return err
 		}
@@ -123,4 +123,42 @@ func (app *application) followUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (app *application) unfollowUser(w http.ResponseWriter, r *http.Request) {}
+func (app *application) unfollowUser(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+
+	followingIDStr := r.PathValue("userID")
+	followingID, err := strconv.ParseInt(followingIDStr, 10, 64)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if user.ID == followingID {
+		app.badRequestResponse(w, r, errors.New("can't follow yourself"))
+		return
+	}
+
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		if err = s.Followers.Delete(r.Context(), followingID, user.ID); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		if err = s.UserLimits.Increment(r.Context(), user.ID, "follow_limit"); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

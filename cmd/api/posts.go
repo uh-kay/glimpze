@@ -79,7 +79,7 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		err = app.store.UserLimits.Reduce(r.Context(), user.ID, "create_post_limit")
+		err = app.store.UserLimits.Decrement(r.Context(), user.ID, "create_post_limit")
 		if err != nil {
 			return err
 		}
@@ -464,6 +464,17 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		if err = s.UserLimits.Decrement(r.Context(), user.ID, "like_limit"); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

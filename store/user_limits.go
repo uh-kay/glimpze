@@ -79,7 +79,7 @@ func (s *UserLimitStore) Add(ctx context.Context, userID int64) (*UserLimit, err
 	return &userLimit, nil
 }
 
-func (s *UserLimitStore) Reduce(ctx context.Context, userID int64, limitType string) error {
+func (s *UserLimitStore) Decrement(ctx context.Context, userID int64, limitType string) error {
 	validLimits := map[string]bool{
 		"create_post_limit": true,
 		"comment_limit":     true,
@@ -104,6 +104,36 @@ func (s *UserLimitStore) Reduce(ctx context.Context, userID int64, limitType str
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
 		return fmt.Errorf("no limit to reduce for user %d", userID)
+	}
+
+	return nil
+}
+
+func (s *UserLimitStore) Increment(ctx context.Context, userID int64, limitType string) error {
+	validLimits := map[string]bool{
+		"create_post_limit": true,
+		"comment_limit":     true,
+		"like_limit":        true,
+		"follow_limit":      true,
+	}
+
+	if !validLimits[limitType] {
+		return fmt.Errorf("invalid limit type: %s", limitType)
+	}
+
+	query := fmt.Sprintf(`
+	UPDATE user_limits
+	SET %s = %s + 1
+	WHERE user_id = $1`, limitType, limitType)
+
+	result, err := s.db.Exec(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no limit to increase for user %d", userID)
 	}
 
 	return nil

@@ -96,8 +96,10 @@ func (app *application) mount() http.Handler {
 				r.Use(app.AuthMiddleware)
 
 				r.Post("/", app.checkResourceAccessWithLimit("user", CreatePostLimit, app.createPost))
+
 				r.Route("/{postID}", func(r chi.Router) {
 					r.Use(app.postContextMiddleware)
+					r.Get("/", app.getPost)
 					r.Patch("/", app.checkPostOwnership("moderator", app.updatePost))
 					r.Delete("/", app.checkPostOwnership("admin", app.deletePost))
 

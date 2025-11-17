@@ -33,3 +33,20 @@ func (s *FollowerStore) Create(ctx context.Context, userID, followerID int64) (*
 
 	return &follower, nil
 }
+
+func (s *FollowerStore) Delete(ctx context.Context, userID, followerID int64) error {
+	query := `
+	DELETE FROM followers
+	WHERE user_id = $1 AND follower_id = $2`
+
+	result, err := s.db.Exec(ctx, query, userID, followerID)
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}

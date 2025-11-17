@@ -62,7 +62,8 @@ type Storage struct {
 	UserLimits interface {
 		Create(ctx context.Context, userID int64) (*UserLimit, error)
 		Add(ctx context.Context, userID int64) (*UserLimit, error)
-		Reduce(ctx context.Context, userID int64, limitType string) error
+		Decrement(ctx context.Context, userID int64, limitType string) error
+		Increment(ctx context.Context, userID int64, limitType string) error
 	}
 	PostLikes interface {
 		Create(ctx context.Context, userID, postID int64) (*PostLike, error)
@@ -70,6 +71,7 @@ type Storage struct {
 	}
 	Followers interface {
 		Create(ctx context.Context, userID, followerID int64) (*Follower, error)
+		Delete(ctx context.Context, userID, followerID int64) error
 	}
 }
 
