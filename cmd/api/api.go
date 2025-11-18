@@ -12,8 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/uh-kay/glimpze/env"
 	"github.com/uh-kay/glimpze/storage"
 	"github.com/uh-kay/glimpze/store"
 	"github.com/uh-kay/glimpze/store/cache"
@@ -70,6 +72,11 @@ func (app *application) mount() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{env.GetString("FRONTEND_URL", "http://localhost:5173")},
+	}))
+
 	r.Use(httprate.Limit(
 		app.config.rateLimitCfg.requestCount,
 		app.config.rateLimitCfg.windowLength,
