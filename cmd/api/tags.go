@@ -51,8 +51,8 @@ func (app *application) createTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "tag created",
-		Data:    tag,
+		"message": "tag created",
+		"tag":     tag,
 	})
 }
 
@@ -76,8 +76,8 @@ func (app *application) getTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    tag,
+		"message": "success",
+		"tag":     tag,
 	})
 }
 
@@ -166,8 +166,8 @@ func (app *application) addTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "tag added",
-		Data:    postTag,
+		"message":  "tag added",
+		"post_tag": postTag,
 	})
 }
 
@@ -216,7 +216,7 @@ func (app *application) listTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    postTags,
+		"message":   "success",
+		"post_tags": postTags,
 	})
 }

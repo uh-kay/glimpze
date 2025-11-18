@@ -47,8 +47,8 @@ func (app *application) updateUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "role updated",
-		Data:    user,
+		"message": "role updated",
+		"user":    user,
 	})
 }
 
@@ -72,8 +72,8 @@ func (app *application) profile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    user,
+		"message": "success",
+		"user":    user,
 	})
 }
 
@@ -118,8 +118,8 @@ func (app *application) followUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "user followed",
-		Data:    follower,
+		"message":  "user followed",
+		"follower": follower,
 	})
 }
 

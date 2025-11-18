@@ -43,8 +43,8 @@ func (app *application) createComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "comment created",
-		Data:    comment,
+		"message": "comment created",
+		"comment": comment,
 	})
 }
 
@@ -68,8 +68,8 @@ func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    comment,
+		"message": "success",
+		"comment": comment,
 	})
 }
 
@@ -107,8 +107,8 @@ func (app *application) updateComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "comment updated",
-		Data:    comment,
+		"message": "comment updated",
+		"comment": comment,
 	})
 }
 
@@ -168,10 +168,8 @@ func (app *application) listComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data: map[string]any{
-			"comment_count": commentCount,
-			"comments":      comments,
-		},
+		"message":       "success",
+		"comment_count": commentCount,
+		"comments":      comments,
 	})
 }

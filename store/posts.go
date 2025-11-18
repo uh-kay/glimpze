@@ -15,6 +15,7 @@ type Post struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Likes     int64     `json:"likes"`
+	Username  string    `json:"username"`
 }
 
 type PostStore struct {
@@ -46,8 +47,9 @@ func (s *PostStore) Create(ctx context.Context, content string, userID int64) (*
 func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	var post Post
 	query := `
-	SELECT p.id, p.content, p.user_id, p.created_at, p.updated_at, COUNT(pl.post_id)
+	SELECT p.id, p.content, p.user_id, p.created_at, p.updated_at, COUNT(pl.post_id), u.name
 	FROM posts p
+	LEFT JOIN users u on u.id = p.user_id
 	LEFT JOIN post_likes pl ON pl.post_id = p.id
 	WHERE p.id = $1
 	GROUP BY p.id`
@@ -59,6 +61,7 @@ func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 		&post.CreatedAt,
 		&post.UpdatedAt,
 		&post.Likes,
+		&post.Username,
 	)
 	if err != nil {
 		switch {
@@ -111,8 +114,8 @@ func (s *PostStore) Delete(ctx context.Context, id int64) error {
 }
 
 type PostWithMetadata struct {
-	Post         Post
-	CommentCount int64
+	Post         Post  `json:"post"`
+	CommentCount int64 `json:"comment_count"`
 }
 
 func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64) ([]*PostWithMetadata, error) {
@@ -122,11 +125,13 @@ func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64
     	p.id,
      	p.content,
       	p.user_id,
+       	u.name,
        	p.created_at,
         p.updated_at,
         COUNT(DISTINCT pl.post_id) AS like_count,
         COUNT(DISTINCT c.id) AS comment_count
     FROM posts p
+    LEFT JOIN users u ON u.id = p.user_id
     LEFT JOIN comments c ON c.post_id = p.id
     LEFT JOIN post_likes pl ON pl.post_id = p.id
     WHERE
@@ -136,7 +141,7 @@ func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64
          	FROM followers
           	WHERE follower_id = $1
         )
-    GROUP BY p.id, p.content, p.user_id, p.created_at, p.updated_at
+    GROUP BY p.id, p.content, p.user_id, u.name, p.created_at, p.updated_at
     ORDER BY p.created_at DESC
     LIMIT $2 OFFSET $3;`
 
@@ -151,6 +156,7 @@ func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64
 			&postWithMetadata.Post.ID,
 			&postWithMetadata.Post.Content,
 			&postWithMetadata.Post.UserID,
+			&postWithMetadata.Post.Username,
 			&postWithMetadata.Post.CreatedAt,
 			&postWithMetadata.Post.UpdatedAt,
 			&postWithMetadata.Post.Likes,
@@ -171,14 +177,16 @@ func (s *PostStore) GetPublicFeed(ctx context.Context, limit, offset int64) ([]*
 		p.id,
      	p.content,
       	p.user_id,
+       	u.name,
        	p.created_at,
         p.updated_at,
         COUNT(DISTINCT pl.post_id) AS like_count,
         COUNT(DISTINCT c.id) AS comment_count
     FROM posts p
+    LEFT JOIN users u ON u.id = p.user_id
     LEFT JOIN comments c ON c.post_id = p.id
     LEFT JOIN post_likes pl ON pl.post_id = p.id
-    GROUP BY p.id, p.content, p.user_id, p.created_at, p.updated_at
+    GROUP BY p.id, p.content, p.user_id, u.name, p.created_at, p.updated_at
     ORDER BY like_count DESC, p.created_at DESC
     LIMIT $1 OFFSET $2`
 
@@ -193,6 +201,7 @@ func (s *PostStore) GetPublicFeed(ctx context.Context, limit, offset int64) ([]*
 			&postWithMetadata.Post.ID,
 			&postWithMetadata.Post.Content,
 			&postWithMetadata.Post.UserID,
+			&postWithMetadata.Post.Username,
 			&postWithMetadata.Post.CreatedAt,
 			&postWithMetadata.Post.UpdatedAt,
 			&postWithMetadata.Post.Likes,

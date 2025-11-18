@@ -33,7 +33,7 @@ func (app *application) userFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    posts,
+		"message": "success",
+		"posts":   posts,
 	})
 }

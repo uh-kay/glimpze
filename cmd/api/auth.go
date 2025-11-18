@@ -52,8 +52,8 @@ func (app *application) login(w http.ResponseWriter, r *http.Request) {
 
 	auth.SetAuthCookies(w, token)
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    user,
+		"message": "success",
+		"user":    user,
 	})
 }
 
@@ -124,11 +124,9 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 	})
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "user registered",
-		Data: map[string]any{
-			"user":       user,
-			"user_limit": userLimit,
-		},
+		"message":    "user registered",
+		"user":       user,
+		"user_limit": userLimit,
 	})
 }
 
@@ -170,8 +168,7 @@ func (app *application) refreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetAuthCookies(w, toks)
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "success",
-		Data:    nil,
+		"message": "success",
 	})
 }
 
@@ -203,7 +200,6 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.ClearAuthCookies(w)
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data:    nil,
+		"message": "success",
 	})
 }

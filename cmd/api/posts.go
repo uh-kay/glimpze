@@ -91,11 +91,9 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "post created",
-		Data: map[string]any{
-			"post":  post,
-			"files": postFileRecords,
-		},
+		"message": "post created",
+		"post":    post,
+		"files":   postFileRecords,
 	})
 }
 
@@ -157,11 +155,9 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "success",
-		Data: map[string]any{
-			"post":      post,
-			"post_file": postFileWithLinks,
-		},
+		"message":   "success",
+		"post":      post,
+		"post_file": postFileWithLinks,
 	})
 }
 
@@ -276,11 +272,9 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		Message: "post updated",
-		Data: map[string]any{
-			"post":      post,
-			"post_file": postFileRecords,
-		},
+		"message":   "post updated",
+		"post":      post,
+		"post_file": postFileRecords,
 	})
 }
 
@@ -480,8 +474,8 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		Message: "like added",
-		Data:    postLike,
+		"message":   "like added",
+		"post_like": postLike,
 	})
 }
 
