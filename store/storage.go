@@ -76,21 +76,27 @@ type Storage struct {
 		Create(ctx context.Context, userID, followerID int64) (*Follower, error)
 		Delete(ctx context.Context, userID, followerID int64) error
 	}
+	UserProfiles interface {
+		Create(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
+		GetByUserID(ctx context.Context, userID int64) (*UserProfile, error)
+		Update(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
 	return Storage{
-		db:         db,
-		Posts:      &PostStore{db},
-		Users:      &UserStore{db},
-		PostFiles:  &PostFileStore{db},
-		Tags:       &TagStore{db},
-		PostTags:   &PostTagStore{db},
-		Roles:      &RoleStore{db},
-		Comments:   &CommentStore{db},
-		UserLimits: &UserLimitStore{db},
-		PostLikes:  &PostLikeStore{db},
-		Followers:  &FollowerStore{db},
+		db:           db,
+		Posts:        &PostStore{db},
+		Users:        &UserStore{db},
+		PostFiles:    &PostFileStore{db},
+		Tags:         &TagStore{db},
+		PostTags:     &PostTagStore{db},
+		Roles:        &RoleStore{db},
+		Comments:     &CommentStore{db},
+		UserLimits:   &UserLimitStore{db},
+		PostLikes:    &PostLikeStore{db},
+		Followers:    &FollowerStore{db},
+		UserProfiles: &UserProfileStore{db},
 	}
 }
 
@@ -108,16 +114,17 @@ func (s *Storage) WithTx(ctx context.Context, fn func(*Storage) error) error {
 	defer tx.Rollback(ctx)
 
 	txStorage := &Storage{
-		db:         s.db,
-		Users:      &UserStore{db: tx},
-		Posts:      &PostStore{db: tx},
-		PostFiles:  &PostFileStore{db: tx},
-		UserLimits: &UserLimitStore{db: tx},
-		Tags:       &TagStore{db: tx},
-		PostTags:   &PostTagStore{db: tx},
-		Comments:   &CommentStore{db: tx},
-		PostLikes:  &PostLikeStore{db: tx},
-		Followers:  &FollowerStore{db: tx},
+		db:           s.db,
+		Users:        &UserStore{db: tx},
+		Posts:        &PostStore{db: tx},
+		PostFiles:    &PostFileStore{db: tx},
+		UserLimits:   &UserLimitStore{db: tx},
+		Tags:         &TagStore{db: tx},
+		PostTags:     &PostTagStore{db: tx},
+		Comments:     &CommentStore{db: tx},
+		PostLikes:    &PostLikeStore{db: tx},
+		Followers:    &FollowerStore{db: tx},
+		UserProfiles: &UserProfileStore{db: tx},
 	}
 
 	if err := fn(txStorage); err != nil {

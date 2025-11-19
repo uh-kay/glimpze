@@ -22,7 +22,7 @@ const maxFormSize = 4<<20 + 8192
 
 var ErrUnsupportedFile = errors.New("file must be jpg, jpeg, png, gif, or webp")
 
-type Form struct {
+type PostForm struct {
 	Content string `json:"content" validate:"required,min=1,max=2048"`
 }
 
@@ -35,7 +35,7 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	content := r.PostFormValue("content")
-	if err := Validate.Struct(Form{Content: content}); err != nil {
+	if err := Validate.Struct(PostForm{Content: content}); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
@@ -135,21 +135,19 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
-	postIDStr := r.PathValue("postID")
-	postID, err := strconv.Atoi(postIDStr)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
-		return
-	}
+	post := getPostFromContext(r)
+
 	if err := r.ParseMultipartForm(maxFormSize); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
+
 	content := r.PostFormValue("content")
-	if err := Validate.Struct(Form{Content: content}); err != nil {
+	if err := Validate.Struct(PostForm{Content: content}); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
+
 	files := r.MultipartForm.File["file"]
 	if len(files) > 4 {
 		app.badRequestResponse(w, r, errors.New("you can only upload 4 files per post"))
@@ -162,9 +160,9 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var post *store.Post
+	var err error
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		post, err = app.store.Posts.Update(r.Context(), content, int64(postID))
+		post, err = s.Posts.Update(r.Context(), content, post.ID)
 		if err != nil {
 			return err
 		}
@@ -180,7 +178,7 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 
 	if len(files) > 0 {
 		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-			oldPostFiles, err = app.store.PostFiles.GetByPostID(r.Context(), post.ID)
+			oldPostFiles, err = s.PostFiles.GetByPostID(r.Context(), post.ID)
 			if err != nil {
 				return err
 			}

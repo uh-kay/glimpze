@@ -154,6 +154,8 @@ func (app *application) mount() http.Handler {
 			r.Get("/", app.profile)
 			r.Put("/{userID}/follow", app.followUser)
 			r.Put("/{userID}/unfollow", app.unfollowUser)
+			r.Post("/", app.createProfile)
+			r.Patch("/", app.updateProfile)
 		})
 	})
 

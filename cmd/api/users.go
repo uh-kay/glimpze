@@ -2,9 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/uh-kay/glimpze/store"
 )
 
@@ -161,4 +164,147 @@ func (app *application) unfollowUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type ProfileForm struct {
+	Biodata string `json:"biodata" validate:"required,min=1,max=255"`
+}
+
+func (app *application) createProfile(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+
+	if err := r.ParseMultipartForm(maxFormSize); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	biodata := r.PostFormValue("biodata")
+	if err := Validate.Struct(ProfileForm{Biodata: biodata}); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.validateFileUpload(fileHeader); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	fileID := uuid.New()
+	fileExt := filepath.Ext(fileHeader.Filename)
+	filename := fmt.Sprintf("%s%s", fileID, fileExt)
+
+	var userProfile *store.UserProfile
+	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+		userProfile, err = s.UserProfiles.Create(r.Context(), fileID, fileExt, user.ID, biodata)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.storage.SaveToR2(r.Context(), file, fileExt, filename); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusCreated, envelope{
+		"message":      "user profile created",
+		"user_profile": userProfile,
+	})
+}
+
+func (app *application) updateProfile(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+
+	if err := r.ParseMultipartForm(maxFormSize); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	biodata := r.PostFormValue("biodata")
+	if err := Validate.Struct(ProfileForm{Biodata: biodata}); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil && err != http.ErrMissingFile {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	hasNewFile := err == nil
+	if hasNewFile {
+		defer file.Close()
+
+		if err := app.validateFileUpload(fileHeader); err != nil {
+			app.badRequestResponse(w, r, err)
+			return
+		}
+	}
+
+	oldUserProfile, err := app.store.UserProfiles.GetByUserID(r.Context(), user.ID)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	var userProfile *store.UserProfile
+
+	if hasNewFile {
+		fileID := uuid.New()
+		fileExt := filepath.Ext(fileHeader.Filename)
+		newFilename := fmt.Sprintf("%s%s", fileID, fileExt)
+		oldFilename := fmt.Sprintf("%s%s", oldUserProfile.FileID.String(), oldUserProfile.FileExtension)
+
+		if err := app.storage.SaveToR2(r.Context(), file, fileExt, newFilename); err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+			userProfile, err = s.UserProfiles.Update(r.Context(), fileID, fileExt, user.ID, biodata)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			_ = app.storage.DeleteFromR2(r.Context(), newFilename)
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		if err = app.storage.DeleteFromR2(r.Context(), oldFilename); err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+	} else {
+		err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
+			userProfile, err = s.UserProfiles.Update(r.Context(), oldUserProfile.FileID, oldUserProfile.FileExtension, user.ID, biodata)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			app.internalServerError(w, r, err)
+		}
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		"message":      "profile updated",
+		"user_profile": userProfile,
+	})
 }
