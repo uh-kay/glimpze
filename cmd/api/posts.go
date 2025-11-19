@@ -97,11 +97,6 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type PostFileWithLink struct {
-	PostFile   *store.PostFile `json:"post_file"`
-	PublicLink string          `json:"public_link"`
-}
-
 func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 	postIDStr := r.PathValue("postID")
 	postID, err := strconv.ParseInt(postIDStr, 10, 64)
@@ -121,43 +116,21 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var postFiles []*store.PostFile
-	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		postFiles, err = app.store.PostFiles.GetByPostID(r.Context(), post.ID)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
-	}
+	fileLinks := make(map[string]string, len(post.FileIDs))
 
-	fileLinks := make(map[string]string, len(postFiles))
-
-	for _, val := range postFiles {
-		publicLink, err := app.storage.GetFromR2(r.Context(), fmt.Sprintf("%s%s", val.FileID, val.FileExtension))
+	for i := range post.FileIDs {
+		publicLink, err := app.storage.GetFromR2(r.Context(), fmt.Sprintf("%s%s", post.FileIDs[i], post.FileExtensions[i]))
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
 		}
-		fileLinks[val.FileID.String()] = publicLink
-	}
-
-	postFileWithLinks := make([]PostFileWithLink, 0, len(postFiles))
-	for i := range len(postFiles) {
-		postFileWithLink := PostFileWithLink{
-			PostFile:   postFiles[i],
-			PublicLink: fileLinks[postFiles[i].FileID.String()],
-		}
-		postFileWithLinks = append(postFileWithLinks, postFileWithLink)
+		fileLinks[post.FileIDs[i].String()] = publicLink
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
-		"message":   "success",
-		"post":      post,
-		"post_file": postFileWithLinks,
+		"message":         "success",
+		"post":            post,
+		"post_file_links": fileLinks,
 	})
 }
 

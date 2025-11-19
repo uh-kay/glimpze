@@ -5,17 +5,22 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 type Post struct {
-	ID        int64     `json:"id"`
-	Content   string    `json:"content"`
-	UserID    int64     `json:"user_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Likes     int64     `json:"likes"`
-	Username  string    `json:"username"`
+	ID                int64       `json:"id"`
+	Content           string      `json:"content"`
+	UserID            int64       `json:"user_id"`
+	CreatedAt         time.Time   `json:"created_at"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+	Likes             int64       `json:"likes"`
+	Username          string      `json:"username"`
+	FileIDs           []uuid.UUID `json:"file_ids"`
+	FileExtensions    []string    `json:"file_extensions"`
+	OriginalFilenames []string    `json:"original_filenames"`
+	Tags              []string    `json:"tags"`
 }
 
 type PostStore struct {
@@ -47,12 +52,18 @@ func (s *PostStore) Create(ctx context.Context, content string, userID int64) (*
 func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	var post Post
 	query := `
-	SELECT p.id, p.content, p.user_id, p.created_at, p.updated_at, COUNT(pl.post_id), u.name
+	SELECT p.id, p.content, p.user_id, p.created_at, p.updated_at, COUNT(pl.post_id), u.name,
+	ARRAY_AGG(pf.file_id) FILTER (WHERE pf.file_id IS NOT NULL) as file_ids,
+	ARRAY_AGG(pf.file_extension) FILTER (WHERE pf.file_extension IS NOT NULL) as file_extensions,
+	ARRAY_AGG(pf.original_filename) FILTER (WHERE pf.original_filename IS NOT NULL) as original_filenames,
+	ARRAY_AGG(DISTINCT pt.tag_name) FILTER (WHERE pt.tag_name IS NOT NULL) as tags
 	FROM posts p
 	LEFT JOIN users u on u.id = p.user_id
+	LEFT JOIN post_files pf ON pf.post_id = p.id
 	LEFT JOIN post_likes pl ON pl.post_id = p.id
+	LEFT JOIN post_tags pt ON pt.post_id = p.id
 	WHERE p.id = $1
-	GROUP BY p.id`
+	GROUP BY p.id, u.name`
 
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&post.ID,
@@ -62,6 +73,10 @@ func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 		&post.UpdatedAt,
 		&post.Likes,
 		&post.Username,
+		&post.FileIDs,
+		&post.FileExtensions,
+		&post.OriginalFilenames,
+		&post.Tags,
 	)
 	if err != nil {
 		switch {
@@ -129,11 +144,17 @@ func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64
        	p.created_at,
         p.updated_at,
         COUNT(DISTINCT pl.post_id) AS like_count,
-        COUNT(DISTINCT c.id) AS comment_count
+        COUNT(DISTINCT c.id) AS comment_count,
+        ARRAY_AGG(pf.file_id) FILTER (WHERE pf.file_id IS NOT NULL) as file_ids,
+		ARRAY_AGG(pf.file_extension) FILTER (WHERE pf.file_extension IS NOT NULL) as file_extensions,
+		ARRAY_AGG(pf.original_filename) FILTER (WHERE pf.original_filename IS NOT NULL) as original_filenames,
+		ARRAY_AGG(DISTINCT pt.tag_name) FILTER (WHERE pt.tag_name IS NOT NULL) as tags
     FROM posts p
     LEFT JOIN users u ON u.id = p.user_id
     LEFT JOIN comments c ON c.post_id = p.id
     LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN post_tags pt ON pt.post_id = p.id
+    LEFT JOIN post_files pf ON pf.post_id = p.id
     WHERE
     	p.user_id = $1
      	OR p.user_id IN (
@@ -161,6 +182,10 @@ func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64
 			&postWithMetadata.Post.UpdatedAt,
 			&postWithMetadata.Post.Likes,
 			&postWithMetadata.CommentCount,
+			&postWithMetadata.Post.FileIDs,
+			&postWithMetadata.Post.FileExtensions,
+			&postWithMetadata.Post.OriginalFilenames,
+			&postWithMetadata.Post.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -181,11 +206,17 @@ func (s *PostStore) GetPublicFeed(ctx context.Context, limit, offset int64) ([]*
        	p.created_at,
         p.updated_at,
         COUNT(DISTINCT pl.post_id) AS like_count,
-        COUNT(DISTINCT c.id) AS comment_count
+        COUNT(DISTINCT c.id) AS comment_count,
+        ARRAY_AGG(pf.file_id) FILTER (WHERE pf.file_id IS NOT NULL) as file_ids,
+		ARRAY_AGG(pf.file_extension) FILTER (WHERE pf.file_extension IS NOT NULL) as file_extensions,
+		ARRAY_AGG(pf.original_filename) FILTER (WHERE pf.original_filename IS NOT NULL) as original_filenames,
+		ARRAY_AGG(DISTINCT pt.tag_name) FILTER (WHERE pt.tag_name IS NOT NULL) as tags
     FROM posts p
     LEFT JOIN users u ON u.id = p.user_id
     LEFT JOIN comments c ON c.post_id = p.id
     LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN post_tags pt ON pt.post_id = p.id
+    LEFT JOIN post_files pf ON pf.post_id = p.id
     GROUP BY p.id, p.content, p.user_id, u.name, p.created_at, p.updated_at
     ORDER BY like_count DESC, p.created_at DESC
     LIMIT $1 OFFSET $2`
@@ -206,6 +237,10 @@ func (s *PostStore) GetPublicFeed(ctx context.Context, limit, offset int64) ([]*
 			&postWithMetadata.Post.UpdatedAt,
 			&postWithMetadata.Post.Likes,
 			&postWithMetadata.CommentCount,
+			&postWithMetadata.Post.FileIDs,
+			&postWithMetadata.Post.FileExtensions,
+			&postWithMetadata.Post.OriginalFilenames,
+			&postWithMetadata.Post.Tags,
 		); err != nil {
 			return nil, err
 		}
