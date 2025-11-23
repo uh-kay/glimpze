@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/uh-kay/glimpze/auth"
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/auth"
+	"newsdrop.org/store"
 )
 
 type contextKey string
@@ -19,6 +19,7 @@ const postCtx contextKey = "post"
 
 func bearerFromHeader(r *http.Request) string {
 	h := r.Header.Get("Authorization")
+
 	if after, ok := strings.CutPrefix(h, "Bearer "); ok {
 		return after
 	}
@@ -27,16 +28,7 @@ func bearerFromHeader(r *http.Request) string {
 
 func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var tokenStr string
-
-		cookie, err := r.Cookie("access_token")
-		if err == nil && cookie != nil {
-			tokenStr = cookie.Value
-		}
-
-		if tokenStr == "" {
-			tokenStr = bearerFromHeader(r)
-		}
+		tokenStr := bearerFromHeader(r)
 		if tokenStr == "" {
 			app.unauthorizedErrorResponse(w, r, errors.New("missing token"))
 			return
@@ -144,46 +136,6 @@ const (
 	LikeLimit       LimitType = "like"
 	FollowLimit     LimitType = "follow"
 )
-
-func (app *application) checkLimit(user *store.User, limitType LimitType) bool {
-	switch limitType {
-	case CreatePostLimit:
-		return user.UserLimit.CreatePostLimit > 0
-	case CommentLimit:
-		return user.UserLimit.CommentLimit > 0
-	case LikeLimit:
-		return user.UserLimit.LikeLimit > 0
-	case FollowLimit:
-		return user.UserLimit.FollowLimit > 0
-	default:
-		return true
-	}
-}
-
-func (app *application) checkResourceAccessWithLimit(requiredRole string, limitType LimitType, next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := getUserFromContext(r)
-
-		allowed, err := app.checkRolePrecedence(r.Context(), user, requiredRole)
-		if err != nil {
-			app.internalServerError(w, r, err)
-			return
-		}
-
-		if !allowed {
-			app.forbiddenResponse(w, r)
-			return
-		}
-
-		limitAllowed := app.checkLimit(user, limitType)
-		if !limitAllowed {
-			app.forbiddenResponse(w, r)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 func (app *application) optionalAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
