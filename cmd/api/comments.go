@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/store"
 )
 
 type CommentPayload struct {

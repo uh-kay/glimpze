@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/store"
 )
 
 func (app *application) userFeed(w http.ResponseWriter, r *http.Request) {
