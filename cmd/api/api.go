@@ -15,10 +15,10 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/uh-kay/glimpze/env"
-	"github.com/uh-kay/glimpze/storage"
-	"github.com/uh-kay/glimpze/store"
-	"github.com/uh-kay/glimpze/store/cache"
+	"newsdrop.org/env"
+	"newsdrop.org/storage"
+	"newsdrop.org/store"
+	"newsdrop.org/store/cache"
 )
 
 type application struct {
@@ -67,16 +67,18 @@ type rateLimitCfg struct {
 
 func (app *application) mount() http.Handler {
 	r := chi.NewRouter()
-
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{env.GetString("FRONTEND_URL", "http://localhost:5173")},
+		AllowedOrigins:   []string{env.GetString("FRONTEND_URL", "http://localhost:5173")},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Set-Cookie"},
+		AllowCredentials: true,
+		MaxAge:           300,
 	}))
-
 	r.Use(httprate.Limit(
 		app.config.rateLimitCfg.requestCount,
 		app.config.rateLimitCfg.windowLength,
@@ -84,7 +86,6 @@ func (app *application) mount() http.Handler {
 			app.rateLimitExceededResponse(w, r, "rate limit exceeded, retry after: 1 minute")
 		})),
 	)
-
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Route("/v1", func(r chi.Router) {
@@ -103,16 +104,19 @@ func (app *application) mount() http.Handler {
 		})
 
 		r.Route("/posts", func(r chi.Router) {
-			r.Get("/{postID}", app.getPost)
-
 			r.Group(func(r chi.Router) {
 				r.Use(app.AuthMiddleware)
+				r.Post("/", app.createPost)
+				r.Get("/", app.getPostByUserID)
+			})
 
-				r.Post("/", app.checkResourceAccessWithLimit("user", CreatePostLimit, app.createPost))
+			r.Route("/{postID}", func(r chi.Router) {
+				r.Get("/", app.getPost)
 
-				r.Route("/{postID}", func(r chi.Router) {
+				r.Group(func(r chi.Router) {
+					r.Use(app.AuthMiddleware)
 					r.Use(app.postContextMiddleware)
-					r.Get("/", app.getPost)
+
 					r.Patch("/", app.checkPostOwnership("moderator", app.updatePost))
 					r.Delete("/", app.checkPostOwnership("admin", app.deletePost))
 
@@ -140,7 +144,6 @@ func (app *application) mount() http.Handler {
 
 		r.Route("/tags", func(r chi.Router) {
 			r.Use(app.AuthMiddleware)
-
 			r.Post("/", app.checkResourceAccess("moderator", app.createTag))
 			r.Get("/{tagID}", app.getTag)
 			r.Delete("/{tagID}", app.checkResourceAccess("moderator", app.deleteTag))
@@ -148,14 +151,9 @@ func (app *application) mount() http.Handler {
 
 		r.Route("/users", func(r chi.Router) {
 			r.Use(app.AuthMiddleware)
-
-			r.Patch("/{userName}", app.checkResourceAccess("admin", app.updateUserRole))
+			// r.Patch("/{userName}", app.checkResourceAccess("admin", app.updateUserRole))
 			r.Get("/{userID}", app.profile)
 			r.Get("/", app.profile)
-			r.Put("/{userID}/follow", app.followUser)
-			r.Put("/{userID}/unfollow", app.unfollowUser)
-			r.Post("/", app.createProfile)
-			r.Patch("/", app.updateProfile)
 		})
 	})
 
