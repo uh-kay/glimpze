@@ -23,4 +23,4 @@ dev:
     docker compose up -d db && air
 
 db:
-    docker exec -it glimpze-db psql -U root -d glimpze
+    docker exec -it newsdrop-db psql -U root -d newsdrop

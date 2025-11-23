@@ -20,8 +20,9 @@ var (
 type Storage struct {
 	db    *pgxpool.Pool
 	Posts interface {
-		Create(ctx context.Context, content string, userID int64) (*Post, error)
+		Create(ctx context.Context, title, content string, userID int64) (*Post, error)
 		GetByID(ctx context.Context, id int64) (*Post, error)
+		GetByUserID(ctx context.Context, userID int64) ([]*Post, error)
 		Update(ctx context.Context, content string, id int64) (*Post, error)
 		Delete(ctx context.Context, id int64) error
 		GetUserFeed(ctx context.Context, userID, limit, offset int64) ([]*PostWithMetadata, error)
@@ -36,7 +37,7 @@ type Storage struct {
 		GetIDs(ctx context.Context, limit, offset int64) ([]int, error)
 	}
 	PostFiles interface {
-		Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
+		Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, position int, postID int64) (*PostFile, error)
 		GetByPostID(ctx context.Context, postID int64) ([]*PostFile, error)
 		// Update(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
 		Delete(ctx context.Context, fileID uuid.UUID) error
@@ -62,41 +63,41 @@ type Storage struct {
 		Delete(ctx context.Context, commentID int64) error
 		List(ctx context.Context, postID int64, sortBy string, limit, offset int64) (int64, []*Comment, error)
 	}
-	UserLimits interface {
-		Create(ctx context.Context, userID int64) (*UserLimit, error)
-		Add(ctx context.Context, userID int64) (*UserLimit, error)
-		Decrement(ctx context.Context, userID int64, limitType string) error
-		Increment(ctx context.Context, userID int64, limitType string) error
-	}
+	// UserLimits interface {
+	// 	Create(ctx context.Context, userID int64) (*UserLimit, error)
+	// 	Add(ctx context.Context, userID int64) (*UserLimit, error)
+	// 	Decrement(ctx context.Context, userID int64, limitType string) error
+	// 	Increment(ctx context.Context, userID int64, limitType string) error
+	// }
 	PostLikes interface {
 		Create(ctx context.Context, userID, postID int64) (*PostLike, error)
 		Delete(ctx context.Context, userID, postID int64) error
 	}
-	Followers interface {
-		Create(ctx context.Context, userID, followerID int64) (*Follower, error)
-		Delete(ctx context.Context, userID, followerID int64) error
-	}
-	UserProfiles interface {
-		Create(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
-		GetByUserID(ctx context.Context, userID int64) (*UserProfile, error)
-		Update(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
-	}
+	// Followers interface {
+	// 	Create(ctx context.Context, userID, followerID int64) (*Follower, error)
+	// 	Delete(ctx context.Context, userID, followerID int64) error
+	// }
+	// UserProfiles interface {
+	// 	Create(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
+	// 	GetByUserID(ctx context.Context, userID int64) (*UserProfile, error)
+	// 	Update(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
+	// }
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
 	return Storage{
-		db:           db,
-		Posts:        &PostStore{db},
-		Users:        &UserStore{db},
-		PostFiles:    &PostFileStore{db},
-		Tags:         &TagStore{db},
-		PostTags:     &PostTagStore{db},
-		Roles:        &RoleStore{db},
-		Comments:     &CommentStore{db},
-		UserLimits:   &UserLimitStore{db},
-		PostLikes:    &PostLikeStore{db},
-		Followers:    &FollowerStore{db},
-		UserProfiles: &UserProfileStore{db},
+		db:        db,
+		Posts:     &PostStore{db},
+		Users:     &UserStore{db},
+		PostFiles: &PostFileStore{db},
+		Tags:      &TagStore{db},
+		PostTags:  &PostTagStore{db},
+		Roles:     &RoleStore{db},
+		Comments:  &CommentStore{db},
+		// UserLimits: &UserLimitStore{db},
+		PostLikes: &PostLikeStore{db},
+		// Followers:    &FollowerStore{db},
+		// UserProfiles: &UserProfileStore{db},
 	}
 }
 
@@ -114,17 +115,17 @@ func (s *Storage) WithTx(ctx context.Context, fn func(*Storage) error) error {
 	defer tx.Rollback(ctx)
 
 	txStorage := &Storage{
-		db:           s.db,
-		Users:        &UserStore{db: tx},
-		Posts:        &PostStore{db: tx},
-		PostFiles:    &PostFileStore{db: tx},
-		UserLimits:   &UserLimitStore{db: tx},
-		Tags:         &TagStore{db: tx},
-		PostTags:     &PostTagStore{db: tx},
-		Comments:     &CommentStore{db: tx},
-		PostLikes:    &PostLikeStore{db: tx},
-		Followers:    &FollowerStore{db: tx},
-		UserProfiles: &UserProfileStore{db: tx},
+		db:        s.db,
+		Users:     &UserStore{db: tx},
+		Posts:     &PostStore{db: tx},
+		PostFiles: &PostFileStore{db: tx},
+		// UserLimits: &UserLimitStore{db: tx},
+		Tags:      &TagStore{db: tx},
+		PostTags:  &PostTagStore{db: tx},
+		Comments:  &CommentStore{db: tx},
+		PostLikes: &PostLikeStore{db: tx},
+		// Followers:    &FollowerStore{db: tx},
+		// UserProfiles: &UserProfileStore{db: tx},
 	}
 
 	if err := fn(txStorage); err != nil {

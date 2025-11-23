@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/store"
 	"github.com/valkey-io/valkey-go"
 )
 

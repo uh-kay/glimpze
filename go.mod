@@ -1,4 +1,4 @@
-module github.com/uh-kay/glimpze
+module newsdrop.org
 
 go 1.25.3
 

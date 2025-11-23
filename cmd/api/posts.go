@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/store"
 )
 
 const maxFileSize = 4 << 20
@@ -23,6 +23,7 @@ const maxFormSize = 4<<20 + 8192
 var ErrUnsupportedFile = errors.New("file must be jpg, jpeg, png, gif, or webp")
 
 type PostForm struct {
+	Title   string `json:"title" validate:"required,min=1,max=30"`
 	Content string `json:"content" validate:"required,min=1,max=2048"`
 }
 
@@ -34,8 +35,16 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	title := r.PostFormValue("title")
 	content := r.PostFormValue("content")
-	if err := Validate.Struct(PostForm{Content: content}); err != nil {
+	if err := Validate.Struct(PostForm{Title: title, Content: content}); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	positionStr := r.PostFormValue("position")
+	position, err := strconv.Atoi(positionStr)
+	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
@@ -54,9 +63,8 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var post *store.Post
-	var err error
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		post, err = s.Posts.Create(r.Context(), content, user.ID)
+		post, err = s.Posts.Create(r.Context(), title, content, user.ID)
 		if err != nil {
 			return err
 		}
@@ -70,24 +78,12 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	postFileRecords := make([]any, 0, len(files))
 
 	for _, fileHeader := range files {
-		postFileRecord, _, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
+		postFileRecord, _, err := app.processFileUpload(r.Context(), fileHeader, position, post.ID)
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
 		}
 		postFileRecords = append(postFileRecords, postFileRecord)
-	}
-
-	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		err = app.store.UserLimits.Decrement(r.Context(), user.ID, "create_post_limit")
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		app.internalServerError(w, r, err)
-		return
 	}
 
 	app.jsonResponse(w, http.StatusCreated, envelope{
@@ -134,6 +130,44 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (app *application) getPostByUserID(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r)
+
+	posts, err := app.store.Posts.GetByUserID(r.Context(), user.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			app.notFoundError(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+
+	allFileLinks := make(map[int64]map[string]string)
+
+	for _, post := range posts {
+		if len(post.FileIDs) > 0 {
+			fileLinks := make(map[string]string, len(post.FileIDs))
+			for i := range post.FileIDs {
+				publicLink, err := app.storage.GetFromR2(r.Context(), fmt.Sprintf("%s%s", post.FileIDs[i], post.FileExtensions[i]))
+				if err != nil {
+					app.internalServerError(w, r, err)
+					return
+				}
+				fileLinks[post.FileIDs[i].String()] = publicLink
+			}
+			allFileLinks[post.ID] = fileLinks
+		}
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		"message":         "success",
+		"posts":           posts,
+		"post_file_links": allFileLinks,
+	})
+}
+
 func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromContext(r)
 
@@ -144,6 +178,13 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 
 	content := r.PostFormValue("content")
 	if err := Validate.Struct(PostForm{Content: content}); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	positionStr := r.PostFormValue("position")
+	position, err := strconv.Atoi(positionStr)
+	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
@@ -160,7 +201,6 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var err error
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
 		post, err = s.Posts.Update(r.Context(), content, post.ID)
 		if err != nil {
@@ -193,7 +233,7 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		filenames := make([]string, 0, len(files))
 
 		for _, fileHeader := range files {
-			postFileRecord, filename, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
+			postFileRecord, filename, err := app.processFileUpload(r.Context(), fileHeader, position, post.ID)
 			if err != nil {
 				app.cleanupUploadedFiles(r.Context(), filenames)
 				app.internalServerError(w, r, err)
@@ -340,7 +380,7 @@ func (app *application) getContentType(fileHeader *multipart.FileHeader) (string
 	return http.DetectContentType(buffer[:n]), nil
 }
 
-func (app *application) processFileUpload(ctx context.Context, fileHeader *multipart.FileHeader, postID int64) (*store.PostFile, string, error) {
+func (app *application) processFileUpload(ctx context.Context, fileHeader *multipart.FileHeader, position int, postID int64) (*store.PostFile, string, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, "", err
@@ -357,7 +397,7 @@ func (app *application) processFileUpload(ctx context.Context, fileHeader *multi
 
 	var postFile *store.PostFile
 	err = app.store.WithTx(ctx, func(s *store.Storage) error {
-		postFile, err = app.store.PostFiles.Create(ctx, fileID, fileExt, fileHeader.Filename, postID)
+		postFile, err = app.store.PostFiles.Create(ctx, fileID, fileExt, fileHeader.Filename, position, postID)
 		if err != nil {
 			return err
 		}
@@ -429,17 +469,6 @@ func (app *application) addLike(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		app.internalServerError(w, r, err)
-		return
-	}
-
-	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		if err = s.UserLimits.Decrement(r.Context(), user.ID, "like_limit"); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/uh-kay/glimpze/env"
-	"github.com/uh-kay/glimpze/store/cache"
+	"newsdrop.org/env"
+	"newsdrop.org/store/cache"
 )
 
 var (
@@ -41,7 +41,7 @@ func IssueTokens(userID string) (*Tokens, error) {
 		UserID:   userID,
 		JTIAcc:   uuid.NewString(),
 		JTIRef:   uuid.NewString(),
-		ExpAcc:   now.Add(15 * time.Minute),
+		ExpAcc:   now.Add(24 * time.Hour),
 		ExpRef:   now.Add(7 * 24 * time.Hour),
 		Issuer:   "glimpze-app",
 		Audience: "glimpze-client",
@@ -94,9 +94,9 @@ func SetAuthCookies(w http.ResponseWriter, t *Tokens) {
 		MaxAge:   int(time.Until(t.ExpAcc).Seconds()),
 		Path:     "/",
 		Domain:   "",
-		Secure:   true,
+		Secure:   false,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteDefaultMode,
 	}
 
 	refresh_cookie := &http.Cookie{
@@ -105,9 +105,9 @@ func SetAuthCookies(w http.ResponseWriter, t *Tokens) {
 		MaxAge:   int(time.Until(t.ExpRef).Seconds()),
 		Path:     "/",
 		Domain:   "",
-		Secure:   true,
+		Secure:   false,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteDefaultMode,
 	}
 
 	http.SetCookie(w, access_cookie)

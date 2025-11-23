@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/uh-kay/glimpze/db"
-	"github.com/uh-kay/glimpze/env"
-	"github.com/uh-kay/glimpze/migrations"
-	"github.com/uh-kay/glimpze/storage"
-	"github.com/uh-kay/glimpze/store"
-	"github.com/uh-kay/glimpze/store/cache"
 	"github.com/valkey-io/valkey-go"
+	"newsdrop.org/db"
+	"newsdrop.org/env"
+	"newsdrop.org/migrations"
+	"newsdrop.org/storage"
+	"newsdrop.org/store"
+	"newsdrop.org/store/cache"
 )
 
 const version = "0.0.1"
@@ -37,7 +37,7 @@ func main() {
 			accessKeySecret: env.GetString("R2_ACCESS_KEY_SECRET", ""),
 		},
 		rateLimitCfg: rateLimitCfg{
-			requestCount: env.GetInt("RATE_LIMITER_REQUEST_COUNT", 20),
+			requestCount: env.GetInt("RATE_LIMITER_REQUEST_COUNT", 1000),
 			windowLength: time.Minute,
 		},
 	}
@@ -104,14 +104,6 @@ func main() {
 		storage:     storage,
 		defaultRole: defaultRole,
 	}
-
-	// Update user limits past midnight
-	go func() {
-		ctx := context.Background()
-		if err := app.updateUserLimits(ctx); err != nil {
-			logger.Error("error updating user limit", "error", err.Error())
-		}
-	}()
 
 	err = app.run(app.mount())
 	if err != nil {

@@ -2,7 +2,8 @@
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS posts(
     id bigserial PRIMARY KEY,
-    content varchar(2048) not null default '',
+    title varchar(30) not null,
+    content varchar(2048) not null,
     user_id bigint not null references users(id) on delete cascade,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -1,9 +1,9 @@
 services:
   db:
     image: postgres:18-alpine
-    container_name: glimpze-db
+    container_name: newsdrop-db
     environment:
-      POSTGRES_DB: glimpze
+      POSTGRES_DB: newsdrop
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
     volumes:
@@ -14,7 +14,7 @@ services:
 
   valkey:
     image: valkey/valkey:9.0-alpine
-    container_name: glimpze-valkey
+    container_name: newsdrop-valkey
     ports:
       - "6379:6379"
 

@@ -3,13 +3,13 @@ package main
 import (
 	"log"
 
-	"github.com/uh-kay/glimpze/db"
-	"github.com/uh-kay/glimpze/env"
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/db"
+	"newsdrop.org/env"
+	"newsdrop.org/store"
 )
 
 func main() {
-	addr := env.GetString("DB_ADDR", "postgres://root:password@localhost:5432/glimpze?sslmode=disable")
+	addr := env.GetString("DB_ADDR", "postgres://root:password@localhost:5432/newsdrop?sslmode=disable")
 	conn, err := db.New(
 		addr,
 		30,
@@ -22,5 +22,5 @@ func main() {
 
 	store := store.NewStorage(conn)
 
-	db.Seed(conn, store)
+	db.Seed(store)
 }

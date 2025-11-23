@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/store"
 )
 
 type TagPayload struct {
