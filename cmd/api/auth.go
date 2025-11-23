@@ -6,8 +6,8 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/uh-kay/glimpze/auth"
-	"github.com/uh-kay/glimpze/store"
+	"newsdrop.org/auth"
+	"newsdrop.org/store"
 )
 
 type LoginPayload struct {
@@ -50,10 +50,12 @@ func (app *application) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.SetAuthCookies(w, token)
+	// auth.SetAuthCookies(w, token)
 	app.jsonResponse(w, http.StatusOK, envelope{
-		"message": "success",
-		"user":    user,
+		"message":       "success",
+		"user":          user,
+		"access_token":  token.Access,
+		"refresh_token": token.Refresh,
 	})
 }
 
@@ -114,19 +116,9 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userLimit *store.UserLimit
-	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		userLimit, err = app.store.UserLimits.Create(r.Context(), user.ID)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
 	app.jsonResponse(w, http.StatusCreated, envelope{
-		"message":    "user registered",
-		"user":       user,
-		"user_limit": userLimit,
+		"message": "user registered",
+		"user":    user,
 	})
 }
 
