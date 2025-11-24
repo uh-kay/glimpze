@@ -16,14 +16,14 @@ type PostTagStore struct {
 	db DBTX
 }
 
-func (s *PostTagStore) Create(ctx context.Context, postID, tagID int64, tagName string) (*PostTag, error) {
+func (s *PostTagStore) Create(ctx context.Context, postID int64, tagName string) (*PostTag, error) {
 	var postTag PostTag
 	query := `
 	INSERT INTO post_tags (post_id, tag_id, tag_name)
-	VALUES ($1, $2, $3)
+	VALUES ($1, (SELECT id from tags WHERE name = $2), $2)
 	RETURNING post_id, tag_id, tag_name, created_at`
 
-	if err := s.db.QueryRow(ctx, query, postID, tagID, tagName).Scan(
+	if err := s.db.QueryRow(ctx, query, postID, tagName).Scan(
 		&postTag.PostID,
 		&postTag.TagID,
 		&postTag.TagName,

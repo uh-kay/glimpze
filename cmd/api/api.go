@@ -107,7 +107,8 @@ func (app *application) mount() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(app.AuthMiddleware)
 				r.Post("/", app.createPost)
-				r.Get("/", app.getPostByUserID)
+				r.Get("/users/{userID}", app.getPostByUserID)
+				r.Get("/users/", app.getPostByUserID)
 			})
 
 			r.Route("/{postID}", func(r chi.Router) {
@@ -143,10 +144,14 @@ func (app *application) mount() http.Handler {
 		})
 
 		r.Route("/tags", func(r chi.Router) {
-			r.Use(app.AuthMiddleware)
-			r.Post("/", app.checkResourceAccess("moderator", app.createTag))
-			r.Get("/{tagID}", app.getTag)
-			r.Delete("/{tagID}", app.checkResourceAccess("moderator", app.deleteTag))
+			r.Get("/{tagName}/posts", app.getPostByTag)
+
+			r.Group(func(r chi.Router) {
+				r.Use(app.AuthMiddleware)
+				r.Post("/", app.checkResourceAccess("moderator", app.createTag))
+				r.Get("/{tagID}", app.getTag)
+				r.Delete("/{tagID}", app.checkResourceAccess("moderator", app.deleteTag))
+			})
 		})
 
 		r.Route("/users", func(r chi.Router) {

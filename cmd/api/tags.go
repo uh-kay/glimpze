@@ -124,20 +124,9 @@ func (app *application) addTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := app.store.Tags.GetByName(r.Context(), payload.Name)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			app.notFoundError(w, r, err)
-		default:
-			app.internalServerError(w, r, err)
-		}
-		return
-	}
-
 	var postTag *store.PostTag
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
-		postTag, err = app.store.PostTags.Create(r.Context(), postID, tag.ID, tag.Name)
+		postTag, err = app.store.PostTags.Create(r.Context(), postID, payload.Name)
 		if err != nil {
 			return err
 		}
@@ -218,5 +207,39 @@ func (app *application) listTag(w http.ResponseWriter, r *http.Request) {
 	app.jsonResponse(w, http.StatusOK, envelope{
 		"message":   "success",
 		"post_tags": postTags,
+	})
+}
+
+func (app *application) getPostByTag(w http.ResponseWriter, r *http.Request) {
+	tagName := r.PathValue("tagName")
+
+	if tagName == "" {
+		app.badRequestResponse(w, r, errors.New("tag name cannot be empty"))
+		return
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	posts, err := app.store.Posts.GetByTag(r.Context(), tagName, limit, offset)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		"message": "success",
+		"posts":   posts,
 	})
 }
