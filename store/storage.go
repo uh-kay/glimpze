@@ -27,6 +27,7 @@ type Storage struct {
 		Delete(ctx context.Context, id int64) error
 		GetUserFeed(ctx context.Context, userID, limit, offset int64) ([]*PostWithMetadata, error)
 		GetPublicFeed(ctx context.Context, limit, offset int64) ([]*PostWithMetadata, error)
+		GetByTag(ctx context.Context, tagName string, limit, offset int) ([]*Post, error)
 	}
 	Users interface {
 		Create(ctx context.Context, user *User) error
@@ -49,7 +50,7 @@ type Storage struct {
 		Delete(ctx context.Context, id int64) error
 	}
 	PostTags interface {
-		Create(ctx context.Context, postID, tagID int64, tagName string) (*PostTag, error)
+		Create(ctx context.Context, postID int64, tagName string) (*PostTag, error)
 		Delete(ctx context.Context, postID, tagID int64) error
 		List(ctx context.Context, postID int64) ([]*PostTag, error)
 	}

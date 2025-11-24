@@ -131,9 +131,21 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getPostByUserID(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromContext(r)
+	var userID int64
+	var err error
+	userIDStr := r.PathValue("userID")
+	if userIDStr == "" {
+		user := getUserFromContext(r)
+		userID = user.ID
+	} else {
+		userID, err = strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			app.badRequestResponse(w, r, err)
+			return
+		}
+	}
 
-	posts, err := app.store.Posts.GetByUserID(r.Context(), user.ID)
+	posts, err := app.store.Posts.GetByUserID(r.Context(), userID)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
