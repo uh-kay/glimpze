@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"time"
 
@@ -10,15 +11,15 @@ import (
 )
 
 type User struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	DisplayName string     `json:"display_name"`
-	Email       string     `json:"email"`
-	Password    password   `json:"-"`
-	ActivatedAt *time.Time `json:"activated_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	Role        Role       `json:"role"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Email       string    `json:"email"`
+	Password    password  `json:"-"`
+	Activated   bool      `json:"activated"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Role        Role      `json:"role"`
 }
 
 type password struct {
@@ -50,7 +51,7 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 	INSERT INTO users (name, display_name, email, password_hash, role_id, role_name)
 	VALUES ($1, $2, $3, $4, $5, $6)
-	RETURNING id, name, display_name, email, activated_at, created_at, updated_at
+	RETURNING id, name, display_name, email, activated, created_at, updated_at
 	`
 
 	err := s.db.QueryRow(ctx,
@@ -66,7 +67,7 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 		&user.Name,
 		&user.DisplayName,
 		&user.Email,
-		&user.ActivatedAt,
+		&user.Activated,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -81,7 +82,7 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	var user User
 
 	query := `
-		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		SELECT users.id, users.name, display_name, email, password_hash, activated, users.created_at, users.updated_at,
 		       roles.id, roles.name, roles.level, roles.description, roles.created_at
 		FROM users
 		JOIN roles ON (users.role_id = roles.id)
@@ -93,7 +94,7 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.ActivatedAt,
+		&user.Activated,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Role.ID,
@@ -113,7 +114,7 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 	var user User
 
 	query := `
-		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		SELECT users.id, users.name, display_name, email, password_hash, activated, users.created_at, users.updated_at,
 		       roles.id, roles.name, roles.level, roles.description, roles.created_at
 		FROM users
 		JOIN roles ON (users.role_id = roles.id)
@@ -125,7 +126,7 @@ func (s *UserStore) GetByName(ctx context.Context, name string) (*User, error) {
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.ActivatedAt,
+		&user.Activated,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Role.ID,
@@ -145,7 +146,7 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 	var user User
 
 	query := `
-		SELECT users.id, users.name, display_name, email, password_hash, activated_at, users.created_at, users.updated_at,
+		SELECT users.id, users.name, display_name, email, password_hash, activated, users.created_at, users.updated_at,
 		       roles.id, roles.name, roles.level, roles.description, roles.created_at
 		FROM users
 		JOIN roles ON (users.role_id = roles.id)
@@ -157,7 +158,7 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.ActivatedAt,
+		&user.Activated,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Role.ID,
@@ -168,6 +169,44 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (*User, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (s *UserStore) GetByToken(tokenScope, tokenPlaintext string) (*User, error) {
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+	query := `
+		SELECT u.id, u.name, u.display_name, u.email, u.password_hash, u.activated, u.created_at, u.updated_at
+		FROM users u
+		INNER JOIN user_tokens t ON u.id = t.user_id
+		WHERE t.hash = $1
+		AND t.scope = $2
+		AND t.expiry > $3`
+
+	var user User
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := s.db.QueryRow(ctx, query, tokenHash[:], tokenScope, time.Now()).Scan(
+		&user.ID,
+		&user.Name,
+		&user.DisplayName,
+		&user.Email,
+		&user.Password.hash,
+		&user.Activated,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrNotFound
+		default:
+			return nil, err
+		}
 	}
 
 	return &user, nil
@@ -188,7 +227,7 @@ func (s *UserStore) UpdateRole(ctx context.Context, name string, role *Role) (*U
 		updated.display_name,
 		updated.email,
 		updated.password_hash,
-		updated.activated_at,
+		updated.activated,
 		updated.created_at,
 		updated.updated_at,
 		roles.id as "roles.id",
@@ -204,7 +243,7 @@ func (s *UserStore) UpdateRole(ctx context.Context, name string, role *Role) (*U
 		&user.DisplayName,
 		&user.Email,
 		&user.Password.hash,
-		&user.ActivatedAt,
+		&user.Activated,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Role.ID,
@@ -244,4 +283,26 @@ func (s *UserStore) GetIDs(ctx context.Context, limit, offset int64) ([]int, err
 	}
 
 	return userIDs, nil
+}
+
+func (s *UserStore) Update(user *User) error {
+	query := `
+	UPDATE users
+	SET name = $1, display_name = $2, email = $3, password_hash = $4, activated = $5
+	WHERE id = $6`
+
+	args := []any{
+		user.Name,
+		user.DisplayName,
+		user.Email,
+		user.Password.hash,
+		user.Activated,
+		user.ID,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := s.db.Exec(ctx, query, args...)
+	return err
 }

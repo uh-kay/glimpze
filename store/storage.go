@@ -34,11 +34,13 @@ type Storage struct {
 		GetByEmail(ctx context.Context, email string) (*User, error)
 		GetByName(ctx context.Context, name string) (*User, error)
 		GetByID(ctx context.Context, id int64) (*User, error)
+		GetByToken(tokenScope, tokenPlaintext string) (*User, error)
 		UpdateRole(ctx context.Context, name string, role *Role) (*User, error)
 		GetIDs(ctx context.Context, limit, offset int64) ([]int, error)
+		Update(user *User) error
 	}
 	PostFiles interface {
-		Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, position int, postID int64) (*PostFile, error)
+		Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
 		GetByPostID(ctx context.Context, postID int64) ([]*PostFile, error)
 		// Update(ctx context.Context, tx pgx.Tx, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error)
 		Delete(ctx context.Context, fileID uuid.UUID) error
@@ -74,15 +76,10 @@ type Storage struct {
 		Create(ctx context.Context, userID, postID int64) (*PostLike, error)
 		Delete(ctx context.Context, userID, postID int64) error
 	}
-	// Followers interface {
-	// 	Create(ctx context.Context, userID, followerID int64) (*Follower, error)
-	// 	Delete(ctx context.Context, userID, followerID int64) error
-	// }
-	// UserProfiles interface {
-	// 	Create(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
-	// 	GetByUserID(ctx context.Context, userID int64) (*UserProfile, error)
-	// 	Update(ctx context.Context, fileID uuid.UUID, fileExtension string, userID int64, biodata string) (*UserProfile, error)
-	// }
+	Tokens interface {
+		New(userID int64, ttl time.Duration, scope string) (*Token, error)
+		Delete(scope string, userID int64) error
+	}
 }
 
 func NewStorage(db *pgxpool.Pool) Storage {
@@ -97,8 +94,7 @@ func NewStorage(db *pgxpool.Pool) Storage {
 		Comments:  &CommentStore{db},
 		// UserLimits: &UserLimitStore{db},
 		PostLikes: &PostLikeStore{db},
-		// Followers:    &FollowerStore{db},
-		// UserProfiles: &UserProfileStore{db},
+		Tokens:    &TokenStore{db},
 	}
 }
 
@@ -127,6 +123,7 @@ func (s *Storage) WithTx(ctx context.Context, fn func(*Storage) error) error {
 		PostLikes: &PostLikeStore{db: tx},
 		// Followers:    &FollowerStore{db: tx},
 		// UserProfiles: &UserProfileStore{db: tx},
+		Tokens: &TokenStore{db: tx},
 	}
 
 	if err := fn(txStorage); err != nil {

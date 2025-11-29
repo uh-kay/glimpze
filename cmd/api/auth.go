@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"newsdrop.org/auth"
@@ -116,6 +118,26 @@ func (app *application) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token, err := app.store.Tokens.New(user.ID, 3*24*time.Hour, store.ScopeActivation)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	isProd := app.config.env == "prod"
+
+	app.background(func() {
+		data := map[string]any{
+			"Username":      user.Name,
+			"ActivationURL": fmt.Sprintf("http://localhost:5173/activate?token=%s", token.Plaintext),
+		}
+
+		err = app.mailer.SendAPI("user_welcome.tmpl", user.Name, user.Email, data, !isProd)
+		if err != nil {
+			app.internalServerError(w, r, err)
+		}
+	})
+
 	app.jsonResponse(w, http.StatusCreated, envelope{
 		"message": "user registered",
 		"user":    user,
@@ -193,5 +215,52 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 	auth.ClearAuthCookies(w)
 	app.jsonResponse(w, http.StatusOK, envelope{
 		"message": "success",
+	})
+}
+
+type ActivatePayload struct {
+	Token string `json:"token" validate:"required"`
+}
+
+func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
+	var payload ActivatePayload
+
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user, err := app.store.Users.GetByToken(store.ScopeActivation, payload.Token)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			app.notFoundError(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+
+	user.Activated = true
+
+	err = app.store.Users.Update(user)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	err = app.store.Tokens.Delete(store.ScopeActivation, user.ID)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		"user": user,
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"newsdrop.org/env"
+	"newsdrop.org/mailer"
 	"newsdrop.org/storage"
 	"newsdrop.org/store"
 	"newsdrop.org/store/cache"
@@ -29,6 +31,8 @@ type application struct {
 	cache       cache.Storage
 	storage     *storage.R2Client
 	defaultRole *store.Role
+	mailer      mailer.Client
+	wg          sync.WaitGroup
 }
 
 type config struct {
@@ -38,6 +42,7 @@ type config struct {
 	valkeyCfg    valkeyCfg
 	r2Cfg        r2Cfg
 	rateLimitCfg rateLimitCfg
+	mailCfg      mailCfg
 }
 
 type dbConfig struct {
@@ -63,6 +68,11 @@ type r2Cfg struct {
 type rateLimitCfg struct {
 	requestCount int
 	windowLength time.Duration
+}
+
+type mailCfg struct {
+	apiKey    string
+	fromEmail string
 }
 
 func (app *application) mount() http.Handler {
@@ -99,6 +109,7 @@ func (app *application) mount() http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", app.login)
 			r.Post("/register", app.register)
+			r.Patch("/activate/", app.activateUser)
 			r.Post("/token/refresh", app.refreshToken)
 			r.Post("/logout", app.logout)
 		})
@@ -111,11 +122,13 @@ func (app *application) mount() http.Handler {
 				r.Get("/users/", app.getPostByUserID)
 			})
 
+			r.Post("/upload", app.uploadPostFiles)
+
 			r.Route("/{postID}", func(r chi.Router) {
 				r.Get("/", app.getPost)
 
 				r.Group(func(r chi.Router) {
-					r.Use(app.AuthMiddleware)
+					// r.Use(app.AuthMiddleware)
 					r.Use(app.postContextMiddleware)
 
 					r.Patch("/", app.checkPostOwnership("moderator", app.updatePost))
