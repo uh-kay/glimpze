@@ -42,13 +42,6 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	positionStr := r.PostFormValue("position")
-	position, err := strconv.Atoi(positionStr)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
-		return
-	}
-
 	files := r.MultipartForm.File["file"]
 	if len(files) > 4 {
 		app.badRequestResponse(w, r, errors.New("you can only upload 4 files per post"))
@@ -63,6 +56,7 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var post *store.Post
+	var err error
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
 		post, err = s.Posts.Create(r.Context(), title, content, user.ID)
 		if err != nil {
@@ -78,7 +72,7 @@ func (app *application) createPost(w http.ResponseWriter, r *http.Request) {
 	postFileRecords := make([]any, 0, len(files))
 
 	for _, fileHeader := range files {
-		postFileRecord, _, err := app.processFileUpload(r.Context(), fileHeader, position, post.ID)
+		postFileRecord, _, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
 		if err != nil {
 			app.internalServerError(w, r, err)
 			return
@@ -112,7 +106,8 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileLinks := make(map[string]string, len(post.FileIDs))
+	fileLinks := make([]string, 0, len(post.FileIDs))
+	fmt.Printf("len(post.FileIDs): %v\n", len(post.FileIDs))
 
 	for i := range post.FileIDs {
 		publicLink, err := app.storage.GetFromR2(r.Context(), fmt.Sprintf("%s%s", post.FileIDs[i], post.FileExtensions[i]))
@@ -120,7 +115,7 @@ func (app *application) getPost(w http.ResponseWriter, r *http.Request) {
 			app.internalServerError(w, r, err)
 			return
 		}
-		fileLinks[post.FileIDs[i].String()] = publicLink
+		fileLinks = append(fileLinks, publicLink)
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
@@ -194,13 +189,6 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	positionStr := r.PostFormValue("position")
-	position, err := strconv.Atoi(positionStr)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
-		return
-	}
-
 	files := r.MultipartForm.File["file"]
 	if len(files) > 4 {
 		app.badRequestResponse(w, r, errors.New("you can only upload 4 files per post"))
@@ -213,6 +201,7 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var err error
 	err = app.store.WithTx(r.Context(), func(s *store.Storage) error {
 		post, err = s.Posts.Update(r.Context(), content, post.ID)
 		if err != nil {
@@ -245,7 +234,7 @@ func (app *application) updatePost(w http.ResponseWriter, r *http.Request) {
 		filenames := make([]string, 0, len(files))
 
 		for _, fileHeader := range files {
-			postFileRecord, filename, err := app.processFileUpload(r.Context(), fileHeader, position, post.ID)
+			postFileRecord, filename, err := app.processFileUpload(r.Context(), fileHeader, post.ID)
 			if err != nil {
 				app.cleanupUploadedFiles(r.Context(), filenames)
 				app.internalServerError(w, r, err)
@@ -392,7 +381,7 @@ func (app *application) getContentType(fileHeader *multipart.FileHeader) (string
 	return http.DetectContentType(buffer[:n]), nil
 }
 
-func (app *application) processFileUpload(ctx context.Context, fileHeader *multipart.FileHeader, position int, postID int64) (*store.PostFile, string, error) {
+func (app *application) processFileUpload(ctx context.Context, fileHeader *multipart.FileHeader, postID int64) (*store.PostFile, string, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, "", err
@@ -409,7 +398,7 @@ func (app *application) processFileUpload(ctx context.Context, fileHeader *multi
 
 	var postFile *store.PostFile
 	err = app.store.WithTx(ctx, func(s *store.Storage) error {
-		postFile, err = app.store.PostFiles.Create(ctx, fileID, fileExt, fileHeader.Filename, position, postID)
+		postFile, err = app.store.PostFiles.Create(ctx, fileID, fileExt, fileHeader.Filename, postID)
 		if err != nil {
 			return err
 		}
@@ -509,4 +498,38 @@ func (app *application) removeLike(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (app *application) uploadPostFiles(w http.ResponseWriter, r *http.Request) {
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	if err := app.validateFileUpload(fileHeader); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	fileID := uuid.New()
+	fileExt := filepath.Ext(fileHeader.Filename)
+	filename := fmt.Sprintf("%s%s", fileID.String(), fileExt)
+
+	if err := app.storage.SaveToR2(r.Context(), file, fileExt, filename); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	link, err := app.storage.GetFromR2(r.Context(), filename)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	app.jsonResponse(w, http.StatusOK, envelope{
+		"message": "success",
+		"link":    link,
+	})
 }

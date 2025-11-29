@@ -15,23 +15,21 @@ type PostFile struct {
 	FileID           uuid.UUID `json:"file_id"`
 	FileExtension    string    `json:"file_extension"`
 	OriginalFilename string    `json:"original_filename"`
-	Position         int       `json:"position"`
 	PostID           int64     `json:"post_id"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
-func (s *PostFileStore) Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, position int, postID int64) (*PostFile, error) {
+func (s *PostFileStore) Create(ctx context.Context, fileID uuid.UUID, fileExtension, originalFilename string, postID int64) (*PostFile, error) {
 	var postFile PostFile
 	query := `
-	INSERT INTO post_files(file_id, file_extension, original_filename, position, post_id)
-	VALUES($1, $2, $3, $4, $5)
-	RETURNING file_id, file_extension, original_filename, position, post_id, created_at`
+	INSERT INTO post_files(file_id, file_extension, original_filename, post_id)
+	VALUES($1, $2, $3, $4)
+	RETURNING file_id, file_extension, original_filename, post_id, created_at`
 
-	err := s.db.QueryRow(ctx, query, fileID, fileExtension, originalFilename, position, postID).Scan(
+	err := s.db.QueryRow(ctx, query, fileID, fileExtension, originalFilename, postID).Scan(
 		&postFile.FileID,
 		&postFile.FileExtension,
 		&postFile.OriginalFilename,
-		&postFile.Position,
 		&postFile.PostID,
 		&postFile.CreatedAt,
 	)
@@ -47,7 +45,7 @@ func (s *PostFileStore) GetByPostID(ctx context.Context, postID int64) ([]*PostF
 	var postFiles []*PostFile
 
 	query := `
-	SELECT file_id, file_extension, original_filename, position, post_id, created_at
+	SELECT file_id, file_extension, original_filename, post_id, created_at
 	FROM post_files
 	WHERE post_id = $1`
 
@@ -62,7 +60,6 @@ func (s *PostFileStore) GetByPostID(ctx context.Context, postID int64) ([]*PostF
 			&postFile.FileID,
 			&postFile.FileExtension,
 			&postFile.OriginalFilename,
-			&postFile.Position,
 			&postFile.PostID,
 			&postFile.CreatedAt,
 		); err != nil {

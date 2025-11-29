@@ -182,8 +182,9 @@ func (s *PostStore) Delete(ctx context.Context, id int64) error {
 }
 
 type PostWithMetadata struct {
-	Post         Post  `json:"post"`
-	CommentCount int64 `json:"comment_count"`
+	Post         Post     `json:"post"`
+	CommentCount int64    `json:"comment_count"`
+	ImageLinks   []string `json:"image_links"`
 }
 
 func (s *PostStore) GetUserFeed(ctx context.Context, userID, limit, offset int64) ([]*PostWithMetadata, error) {

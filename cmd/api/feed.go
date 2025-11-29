@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -30,6 +31,20 @@ func (app *application) userFeed(w http.ResponseWriter, r *http.Request) {
 			app.internalServerError(w, r, err)
 			return
 		}
+	}
+
+	for _, post := range posts {
+		links := make([]string, 0, len(post.Post.FileIDs))
+		for j := range len(post.Post.FileIDs) {
+			link, err := app.storage.GetFromR2(r.Context(), fmt.Sprintf("%s%s", post.Post.FileIDs[j].String(), post.Post.FileExtensions[j]))
+			if err != nil {
+				app.internalServerError(w, r, err)
+				return
+			}
+			links = append(links, link)
+		}
+
+		post.ImageLinks = links
 	}
 
 	app.jsonResponse(w, http.StatusOK, envelope{
