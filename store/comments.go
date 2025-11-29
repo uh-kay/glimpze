@@ -17,6 +17,7 @@ type Comment struct {
 	ID              int64          `json:"id"`
 	PostID          int64          `json:"post_id"`
 	UserID          int64          `json:"user_id"`
+	Username        string         `json:"username"`
 	ParentCommentID pgtype.Numeric `json:"parent_comment_id"`
 	Content         string         `json:"content"`
 	Likes           int64          `json:"likes"`
@@ -51,14 +52,16 @@ func (s *CommentStore) Create(ctx context.Context, content string, userID, postI
 func (s *CommentStore) GetByID(ctx context.Context, commentID int64) (*Comment, error) {
 	var comment Comment
 	query := `
-	SELECT id, post_id, user_id, parent_comment_id, content, likes, created_at, updated_at
-	FROM comments
-	WHERE id = $1`
+	SELECT c.id, c.post_id, c.user_id, u.name, c.parent_comment_id, c.content, c.likes, c.created_at, c.updated_at
+	FROM comments c
+	LEFT JOIN users u ON c.user_id = u.id
+	WHERE c.id = $1`
 
 	err := s.db.QueryRow(ctx, query, commentID).Scan(
 		&comment.ID,
 		&comment.PostID,
 		&comment.UserID,
+		&comment.Username,
 		&comment.ParentCommentID,
 		&comment.Content,
 		&comment.Likes,
@@ -128,8 +131,9 @@ func (s *CommentStore) List(ctx context.Context, postID int64, sortBy string, li
 
 	var comments []*Comment
 	query = `
-	SELECT id, post_id, user_id, parent_comment_id, content, likes, created_at, updated_at
-	FROM comments
+	SELECT c.id, c.post_id, c.user_id, u.name, c.parent_comment_id, c.content, c.likes, c.created_at, c.updated_at
+	FROM comments c
+	LEFT JOIN users u ON c.user_id = u.id
 	WHERE post_id = $1`
 
 	switch sortBy {
@@ -154,6 +158,7 @@ func (s *CommentStore) List(ctx context.Context, postID int64, sortBy string, li
 			&comment.ID,
 			&comment.PostID,
 			&comment.UserID,
+			&comment.Username,
 			&comment.ParentCommentID,
 			&comment.Content,
 			&comment.Likes,
